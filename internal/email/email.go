@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"html"
 	"log/slog"
 	"net"
 	"net/http"
@@ -298,6 +299,15 @@ func (c *Client) sendTx(ctx context.Context, body txRequest) error {
 	return nil
 }
 
+// esc escapes a value for interpolation into an HTML mail body. Names, video
+// titles, comment text and workspace names all come from users, and a mail
+// client renders whatever markup reaches it — so everything the senders splice
+// into their bodies goes through here, links included: escaping turns a URL's
+// "&" into "&amp;", which is what an href needs anyway.
+func esc(s string) string {
+	return html.EscapeString(s)
+}
+
 // rejectCRLF returns an error if v contains CR or LF, which would let an
 // attacker inject extra SMTP headers (e.g. Bcc:, From:) via user-controlled
 // values like organization names. Header values must be a single line.
@@ -447,7 +457,7 @@ func (c *Client) SendPasswordReset(ctx context.Context, toEmail, toName, resetLi
 		subject:     "Reset your password",
 		Body: fmt.Sprintf(
 			`<p>Hi %s,</p><p>Click the link below to reset your password:</p><p><a href="%s">Reset password</a></p>`,
-			toName, resetLink,
+			esc(toName), esc(resetLink),
 		),
 	}
 
@@ -480,7 +490,7 @@ func (c *Client) SendCommentNotification(ctx context.Context, toEmail, toName, v
 		subject:     "New comment on your video",
 		Body: fmt.Sprintf(
 			`<p>Hi %s,</p><p><strong>%s</strong> commented on your video <strong>%s</strong>:</p><blockquote>%s</blockquote><p><a href="%s">View video</a></p>`,
-			toName, commentAuthor, videoTitle, commentBody, watchURL,
+			esc(toName), esc(commentAuthor), esc(videoTitle), esc(commentBody), esc(watchURL),
 		),
 	}
 
@@ -513,7 +523,7 @@ func (c *Client) SendViewNotification(ctx context.Context, toEmail, toName, vide
 		subject:     "Your video was viewed",
 		Body: fmt.Sprintf(
 			`<p>Hi %s,</p><p>Your video <strong>%s</strong> has been viewed %d time(s).</p><p><a href="%s">View video</a></p>`,
-			toName, videoTitle, viewCount, watchURL,
+			esc(toName), esc(videoTitle), viewCount, esc(watchURL),
 		),
 	}
 
@@ -539,7 +549,7 @@ func (c *Client) SendConfirmation(ctx context.Context, toEmail, toName, confirmL
 		subject:     "Confirm your email",
 		Body: fmt.Sprintf(
 			`<p>Hi %s,</p><p>Please confirm your email address by clicking the link below:</p><p><a href="%s">Confirm email</a></p>`,
-			toName, confirmLink,
+			esc(toName), esc(confirmLink),
 		),
 	}
 
@@ -567,7 +577,7 @@ func (c *Client) SendWelcome(ctx context.Context, toEmail, toName, dashboardURL 
 		Body: fmt.Sprintf(
 			`<p>Hi %s,</p><p>Welcome to SendRec! Your account is ready.</p><p><a href="%s">Go to dashboard</a></p>`+
 				`<p style="margin-top:16px;font-size:13px;color:#64748b;">SendRec is open source. If you find it useful, <a href="https://github.com/sendrec/sendrec">star us on GitHub</a>!</p>`,
-			toName, dashboardURL,
+			esc(toName), esc(dashboardURL),
 		),
 	}
 
@@ -593,7 +603,7 @@ func (c *Client) SendOnboardingDay2(ctx context.Context, toEmail, toName, dashbo
 		subject:     "Ready to share your first video?",
 		Body: fmt.Sprintf(
 			`<p>Hi %s,</p><p>Ready to share your first video? Record and share in seconds.</p><p><a href="%s">Get started</a></p>`,
-			toName, dashboardURL,
+			esc(toName), esc(dashboardURL),
 		),
 	}
 
@@ -619,7 +629,7 @@ func (c *Client) SendOnboardingDay7(ctx context.Context, toEmail, toName, dashbo
 		subject:     "Unlock more with SendRec Pro",
 		Body: fmt.Sprintf(
 			`<p>Hi %s,</p><p>Unlock more with SendRec Pro — longer recordings, custom branding, and more.</p><p><a href="%s">Learn more</a></p>`,
-			toName, dashboardURL,
+			esc(toName), esc(dashboardURL),
 		),
 	}
 
@@ -659,7 +669,7 @@ func (c *Client) SendDigestNotification(ctx context.Context, toEmail, toName str
 		subject:     "Your weekly video digest",
 		Body: fmt.Sprintf(
 			`<p>Hi %s,</p><p>Your videos received %d view(s) and %d comment(s) this week.</p>`,
-			toName, totalViews, totalComments,
+			esc(toName), totalViews, totalComments,
 		),
 	}
 
@@ -686,7 +696,7 @@ func (c *Client) SendOrgInvite(ctx context.Context, toEmail, orgName, inviterNam
 		subject:     fmt.Sprintf("Join %s on SendRec", orgName),
 		Body: fmt.Sprintf(
 			`<p>Hi,</p><p><strong>%s</strong> has invited you to join <strong>%s</strong> on SendRec.</p><p><a href="%s">Accept invitation</a></p>`,
-			inviterName, orgName, acceptLink,
+			esc(inviterName), esc(orgName), esc(acceptLink),
 		),
 	}
 
@@ -723,7 +733,7 @@ func (c *Client) SendRetentionWarning(ctx context.Context, toEmail string, video
 		subject:     "Videos scheduled for deletion",
 		Body: fmt.Sprintf(
 			`<p>Hi,</p><p>The following videos will be deleted on <strong>%s</strong>: %s.</p><p>Upgrade your plan to keep them.</p>`,
-			expiryDate, strings.Join(titles, ", "),
+			esc(expiryDate), esc(strings.Join(titles, ", ")),
 		),
 	}
 
