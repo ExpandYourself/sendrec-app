@@ -477,6 +477,45 @@ Set `SMTP_HOST` to enable a direct SMTP relay (Gmail, SES, Postmark, your own se
 | `SMTP_PASSWORD` | Auth password / app password |
 | `SMTP_TLS` | `starttls` (default — fails if server does not advertise STARTTLS), `tls` (implicit TLS, use port 465), `auto` (try STARTTLS, fall back to plaintext — **plaintext-only relays must be unauthenticated**: when `SMTP_USERNAME` is set, the Go stdlib refuses PLAIN auth on a non-TLS connection unless the host is `localhost`, so configure either `starttls`/`tls` for authenticated relays or omit credentials entirely), or `none` (plaintext, same auth restriction). Any other value (typo, whitespace, unsupported keyword) is coerced to `starttls` with a startup warning so a misconfigured `start_tls` cannot silently downgrade to plaintext. |
 | `EMAIL_FROM_ADDRESS` | `From:` address used for both Listmonk and SMTP (default `noreply@sendrec.eu`) |
+| `EMAIL_FROM_NAME` | Optional `From:` display name. Leave unset to keep the current bare-address header. The SMTP/sendmail envelope sender (`MAIL FROM`) always stays `EMAIL_FROM_ADDRESS`. The header is built with Go's `mail.Address`, which quotes names containing `,` `<` `"` and RFC 2047-encodes non-ASCII. |
+
+#### File templates (SMTP / sendmail)
+
+Set `EMAIL_TEMPLATE_DIR` to a directory of optional overrides. SendRec supplies a built-in subject and HTML body for every transactional mail; you only need the files you want to change. Templates are parsed at startup — a broken or empty file logs a warning and that part falls back to the built-in. Template changes require an application restart (no hot reload).
+
+Precedence for each mail type:
+
+1. Configured Listmonk template ID, if set. Listmonk then owns subject and body. SendRec does **not** send `txRequest.subject` on the Listmonk JSON payload, so a Listmonk template's own subject wins even if a `*.subject.tmpl` file exists. The file templates are still rendered into the JSON `body` field and are used if Listmonk fails and sendmail fallback is enabled.
+2. A valid file in `EMAIL_TEMPLATE_DIR`, if present (subject and HTML independently).
+3. The built-in SendRec template.
+
+Expected layout:
+
+```text
+/app/email-templates/
+  password-reset.subject.tmpl
+  password-reset.html.tmpl
+  org-invite.html.tmpl          # subject falls back to built-in
+```
+
+Bodies are `html/template` (dynamic values are escaped for HTML). Subjects are `text/template` so names like `AT&T` are not turned into `AT&amp;T` in the Subject header.
+
+| File stem | Mail | Template data |
+|-----------|------|----------------|
+| `password-reset` | Password reset | `{{.Name}}`, `{{.ResetLink}}` |
+| `comment-notification` | New comment | `{{.Name}}`, `{{.VideoTitle}}`, `{{.CommentAuthor}}`, `{{.CommentBody}}`, `{{.WatchURL}}` |
+| `view-notification` | Single-video view | `{{.Name}}`, `{{.VideoTitle}}`, `{{.WatchURL}}`, `{{.ViewCount}}` |
+| `email-confirmation` | Signup confirmation | `{{.Name}}`, `{{.ConfirmLink}}` |
+| `welcome` | Welcome after confirmation | `{{.Name}}`, `{{.DashboardURL}}`, `{{.GitHubURL}}` |
+| `onboarding-day2` | Day-two onboarding | `{{.Name}}`, `{{.DashboardURL}}` |
+| `onboarding-day7` | Day-seven onboarding | `{{.Name}}`, `{{.DashboardURL}}` |
+| `weekly-digest` | Weekly digest | `{{.Name}}`, `{{.TotalViews}}`, `{{.TotalComments}}`, `{{.Videos}}` (each: `.Title`, `.ViewCount`, `.CommentCount`, `.WatchURL`) |
+| `org-invite` | Workspace invitation | `{{.OrgName}}`, `{{.InviterName}}`, `{{.AcceptLink}}` |
+| `retention-warning` | Retention warning | `{{.ExpiryDate}}`, `{{.Videos}}` (each: `.Title`, `.WatchURL`) |
+
+Helm: set `env.emailTemplateDir` and mount the files with `deployment.extraVolumes` / `extraVolumeMounts`.
+
+Listmonk templates keep the existing `{{ .Tx.Data.* }}` variables documented above; those are independent of the file-template fields.
 
 #### Sendmail (opt-in fallback)
 

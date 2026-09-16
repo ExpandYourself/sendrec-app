@@ -226,6 +226,8 @@ The app picks a backend in this order: Listmonk (if `listmonkBaseUrl` is set) â†
 | `secrets.smtpUsername` / `smtpPassword` | `SMTP_USERNAME` / `SMTP_PASSWORD` | Relay credentials; omit both for unauthenticated relays | `""` |
 | `env.emailUseSendmail` | `EMAIL_USE_SENDMAIL` | `"true"` to use the local `sendmail(8)` binary, also as a fallback when Listmonk fails | `""` |
 | `env.emailFromAddress` | `EMAIL_FROM_ADDRESS` | `From:` address for both backends | `""` (`noreply@sendrec.eu`) |
+| `env.emailFromName` | `EMAIL_FROM_NAME` | Optional `From:` display name. The SMTP envelope sender stays the bare address. Names with `,` `<` `"` are quoted; non-ASCII is RFC 2047-encoded | `""` |
+| `env.emailTemplateDir` | `EMAIL_TEMPLATE_DIR` | Optional directory of `*.subject.tmpl` / `*.html.tmpl` overrides. Mount the files with `deployment.extraVolumes` / `extraVolumeMounts`. Invalid files warn at startup and fall back to the built-in for that type | `""` |
 | `env.emailAllowlist` | `EMAIL_ALLOWLIST` | Comma-separated allowed recipient domains (`@example.com`) and addresses. Confirmation, welcome, onboarding, invite and retention mail bypass it. Handy for staging | `""` |
 | `env.developerEmail` | `DEVELOPER_EMAIL` | Redirects **every** outgoing email to this address and bypasses the allowlist. Staging only - in production it silently swallows all user mail | `""` |
 

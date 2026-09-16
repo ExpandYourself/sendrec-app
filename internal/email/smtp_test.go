@@ -9,6 +9,8 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -208,6 +210,129 @@ func TestSendTx_SMTP_Success(t *testing.T) {
 	}
 	if !strings.Contains(got.data, "https://app.sendrec.eu/confirm?token=abc") {
 		t.Errorf("missing confirm link in body: %q", got.data)
+	}
+	if !strings.Contains(got.data, "From: noreply@sendrec.eu\r\n") {
+		t.Errorf("empty display name must keep a bare From address, got: %q", got.data)
+	}
+	if strings.Contains(got.data, "From: <noreply@sendrec.eu>") {
+		t.Errorf("empty display name must not wrap the address in angle brackets, got: %q", got.data)
+	}
+}
+
+func TestSendTx_SMTP_FromNameInHeaderNotEnvelope(t *testing.T) {
+	s := newFakeSMTPServer(t)
+	host, port := splitHostPort(t, s.Addr())
+
+	client := New(Config{
+		SMTPHost:    host,
+		SMTPPort:    port,
+		SMTPTLS:     "none",
+		FromAddress: "noreply@sendrec.eu",
+		FromName:    "Björn & Co",
+	})
+
+	if err := client.SendConfirmation(context.Background(), "alice@example.com", "Alice", "https://app.sendrec.eu/confirm?token=abc"); err != nil {
+		t.Fatalf("SendConfirmation: %v", err)
+	}
+
+	msgs := waitForMessages(t, s, 1)
+	if len(msgs) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(msgs))
+	}
+	got := msgs[0]
+	if !strings.Contains(got.from, "noreply@sendrec.eu") {
+		t.Errorf("envelope sender must stay the bare address, got %q", got.from)
+	}
+	if strings.Contains(got.from, "Björn") || strings.Contains(got.from, "Co") {
+		t.Errorf("display name leaked into MAIL FROM: %q", got.from)
+	}
+	if !strings.Contains(got.data, "From: ") {
+		t.Errorf("missing From header: %q", got.data)
+	}
+	if !strings.Contains(got.data, "noreply@sendrec.eu") {
+		t.Errorf("From header missing address: %q", got.data)
+	}
+	if !strings.Contains(got.data, "=?utf-8?") && !strings.Contains(got.data, "Björn") {
+		t.Errorf("expected RFC 2047-encoded or raw display name in From header: %q", got.data)
+	}
+	if strings.Contains(got.data, "From: noreply@sendrec.eu\r\n") {
+		t.Errorf("display name was dropped from From header: %q", got.data)
+	}
+}
+
+func TestSendTx_SMTP_RejectsCRLFInFromName(t *testing.T) {
+	s := newFakeSMTPServer(t)
+	host, port := splitHostPort(t, s.Addr())
+
+	client := New(Config{
+		SMTPHost:    host,
+		SMTPPort:    port,
+		SMTPTLS:     "none",
+		FromAddress: "noreply@sendrec.eu",
+		FromName:    "SendRec\r\nBcc: attacker@evil.com",
+	})
+
+	err := client.SendConfirmation(context.Background(), "alice@example.com", "Alice", "https://example.com/confirm")
+	if err == nil {
+		t.Fatal("expected CRLF rejection on From name, got nil")
+	}
+	if !strings.Contains(err.Error(), "CR/LF") {
+		t.Errorf("expected CR/LF rejection error, got: %v", err)
+	}
+	if got := s.Captured(); len(got) != 0 {
+		t.Errorf("expected no SMTP delivery on CRLF reject, got: %+v", got)
+	}
+}
+
+func TestSendTx_SMTP_QuotedFromName(t *testing.T) {
+	s := newFakeSMTPServer(t)
+	host, port := splitHostPort(t, s.Addr())
+
+	client := New(Config{
+		SMTPHost:    host,
+		SMTPPort:    port,
+		SMTPTLS:     "none",
+		FromAddress: "noreply@sendrec.eu",
+		FromName:    "Acme, Inc",
+	})
+
+	if err := client.SendConfirmation(context.Background(), "alice@example.com", "Alice", "https://example.com/confirm"); err != nil {
+		t.Fatalf("send: %v", err)
+	}
+	msgs := waitForMessages(t, s, 1)
+	if !strings.Contains(msgs[0].data, `"Acme, Inc"`) {
+		t.Errorf("expected quoted display name, got: %q", msgs[0].data)
+	}
+}
+
+func TestSendTx_SMTP_CustomTemplateSubjectAndBody(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, MailKindEmailConfirmation+".subject.tmpl"), []byte("Please confirm, {{.Name}}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, MailKindEmailConfirmation+".html.tmpl"), []byte(`<p><a href="{{.ConfirmLink}}">Verify now</a></p>`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := newFakeSMTPServer(t)
+	host, port := splitHostPort(t, s.Addr())
+	client := New(Config{
+		SMTPHost:    host,
+		SMTPPort:    port,
+		SMTPTLS:     "none",
+		FromAddress: "noreply@sendrec.eu",
+		TemplateDir: dir,
+	})
+
+	if err := client.SendConfirmation(context.Background(), "alice@example.com", "Alice", "https://app.sendrec.eu/confirm?token=abc"); err != nil {
+		t.Fatalf("send: %v", err)
+	}
+	msgs := waitForMessages(t, s, 1)
+	if !strings.Contains(msgs[0].data, "Subject: Please confirm, Alice") {
+		t.Errorf("missing custom subject: %q", msgs[0].data)
+	}
+	if !strings.Contains(msgs[0].data, "Verify now") {
+		t.Errorf("missing custom body: %q", msgs[0].data)
 	}
 }
 

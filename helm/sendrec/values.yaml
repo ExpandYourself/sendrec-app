@@ -94,7 +94,9 @@ sendrec:
     listmonkRetentionWarningTemplateId: ""  # heads-up before retention deletes videos
     emailAllowlist: ""                      # if set, only these addresses/domains receive mail and the rest is dropped
     developerEmail: ""                      # when set, every outgoing email is redirected here
-    emailFromAddress: ""                    # From: header on outgoing mail
+    emailFromAddress: ""                    # From: address on outgoing mail
+    emailFromName: ""                       # optional From: display name; envelope sender stays the address
+    emailTemplateDir: ""                    # optional directory of *.subject.tmpl / *.html.tmpl overrides
 
     # Email (SMTP — used when listmonkBaseUrl is unset)
     smtpHost: ""
