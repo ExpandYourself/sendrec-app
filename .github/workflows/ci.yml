@@ -87,6 +87,9 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
 
       - name: Run Go tests
+        # Without an explicit shell, GitHub runs `bash -e` with no pipefail, so
+        # piping into tee returns tee's exit code and a failing test passes CI.
+        shell: bash
         run: go clean -cache && go test ./... -race -coverprofile=coverage.out -covermode=atomic | tee test-output.txt
         env:
           # Tests that need real schema constraints connect here; they skip when
