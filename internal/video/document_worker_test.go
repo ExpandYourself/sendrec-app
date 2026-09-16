@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/pashagolub/pgxmock/v4"
+	"github.com/pashagolub/pgxmock/v5"
 )
 
 func TestProcessNextDocument_Success(t *testing.T) {
@@ -46,7 +46,7 @@ func TestProcessNextDocument_Success(t *testing.T) {
 	mock.ExpectQuery(`UPDATE videos SET document_status = 'processing'`).
 		WillReturnRows(
 			pgxmock.NewRows([]string{"id", "transcript_json", "transcription_language"}).
-				AddRow("vid-1", transcriptJSON, nil),
+				AddRow("vid-1", transcriptJSON, "auto"),
 		)
 
 	// Save document result
