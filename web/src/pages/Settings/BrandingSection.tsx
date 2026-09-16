@@ -1,5 +1,6 @@
 import { type FormEvent, useState } from "react";
 import { apiFetch } from "../../api/client";
+import { getCurrentOrgId } from "../../api/orgContext";
 import { LimitsResponse } from "../../types/limits";
 import { BrandingSettings } from "./types";
 
@@ -11,6 +12,11 @@ interface BrandingSectionProps {
 }
 
 export function BrandingSection({ initialBranding, limits }: BrandingSectionProps) {
+  // The scope comes from the selected workspace rather than the URL, so the
+  // same screen edits two different things and has to say which. The workspace
+  // switcher already names the active one, so this only needs the scope — and
+  // reading it costs no request.
+  const editingWorkspace = getCurrentOrgId() !== null;
   const [branding, setBranding] = useState(initialBranding);
   const [brandingMessage, setBrandingMessage] = useState("");
   const [brandingError, setBrandingError] = useState("");
@@ -114,6 +120,11 @@ export function BrandingSection({ initialBranding, limits }: BrandingSectionProp
       <h2>Branding</h2>
       <p className="card-description">
         Customize how your shared video pages look to viewers.
+      </p>
+      <p className="card-description">
+        {editingWorkspace
+          ? "Editing branding for the selected workspace — it applies to every video the workspace owns."
+          : "Editing your personal branding — it applies to videos outside a workspace."}
       </p>
 
       <div className="form-field">
