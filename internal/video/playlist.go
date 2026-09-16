@@ -347,7 +347,6 @@ func (h *Handler) UpdatePlaylist(w http.ResponseWriter, r *http.Request) {
 	if req.RequireEmail != nil {
 		setClauses = append(setClauses, fmt.Sprintf("require_email = $%d", paramIdx))
 		args = append(args, *req.RequireEmail)
-		paramIdx++
 	}
 
 	clause, args := orgRowFilter(r.Context(), playlistID, args, "")
