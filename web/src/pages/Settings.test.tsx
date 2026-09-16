@@ -95,6 +95,29 @@ describe("Settings", () => {
     });
   });
 
+  it("says which scope the branding settings edit", async () => {
+    for (const [orgId, expected] of [
+      ["org-1", /Editing branding for the selected workspace/],
+      [null, /Editing your personal branding/],
+    ] as const) {
+      setCurrentOrgId(orgId);
+      mockApiFetch.mockReset();
+      mockApiFetch
+        .mockResolvedValueOnce({ name: "Alice", email: "alice@example.com" })
+        .mockResolvedValueOnce({ notificationMode: "off" })
+        .mockResolvedValueOnce({ brandingEnabled: true })
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce({})
+        .mockRejectedValueOnce(new Error("Not Found"))
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce({ identities: [], hasPassword: false });
+
+      const { unmount } = renderSettings();
+      expect(await screen.findByText(expected)).toBeInTheDocument();
+      unmount();
+    }
+  });
+
   it("renders Integrations card", async () => {
     mockApiFetch
       .mockResolvedValueOnce({ name: "Alice", email: "alice@example.com" })
