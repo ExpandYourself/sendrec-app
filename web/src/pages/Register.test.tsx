@@ -146,6 +146,32 @@ describe("Register", () => {
     });
   });
 
+  it("shows the form when registration is disabled but an invite token is present", async () => {
+    mockHealthResponse(false);
+    renderRegister(["/register?redirect=%2Finvites%2Faccept%3Ftoken%3Dinvite-token"]);
+
+    expect(await screen.findByRole("heading", { name: "Create account" })).toBeInTheDocument();
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it("sends the invite token with the registration request", async () => {
+    mockHealthResponse(true);
+    const user = userEvent.setup();
+    mockApiFetch.mockResolvedValueOnce({ message: "ok", requiresEmailConfirmation: true });
+    renderRegister(["/register?redirect=%2Finvites%2Faccept%3Ftoken%3Dinvite-token"]);
+
+    await user.type(await screen.findByLabelText("Name"), "Alice");
+    await user.type(screen.getByLabelText("Email"), "alice@example.com");
+    await user.type(screen.getByLabelText(/^Password/), "password123");
+    await user.type(screen.getByLabelText("Confirm password"), "password123");
+    await user.click(screen.getByRole("button", { name: "Create account" }));
+
+    expect(JSON.parse(mockApiFetch.mock.calls[0][1].body)).toMatchObject({
+      email: "alice@example.com",
+      inviteToken: "invite-token",
+    });
+  });
+
   it("shows form when registration is enabled", async () => {
     mockHealthResponse(true);
     renderRegister();

@@ -63,6 +63,9 @@ type registerRequest struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
 	Name     string `json:"name"`
+	// InviteToken is the raw workspace invite token. It authorizes this one
+	// email to register while public registration is disabled.
+	InviteToken string `json:"inviteToken"`
 }
 
 type loginRequest struct {
@@ -120,15 +123,32 @@ func hashToken(raw string) string {
 	return hex.EncodeToString(h[:])
 }
 
-func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
-	if !h.registrationEnabled {
-		httputil.WriteError(w, http.StatusForbidden, "registration is disabled")
-		return
+// inviteAllowsRegistration reports whether a pending workspace invite authorizes
+// the given email to create an account while public registration is off. The
+// lookup is scoped to the invited address, so a leaked token cannot onboard
+// anyone else, and expired, revoked or already accepted invites match nothing.
+func (h *Handler) inviteAllowsRegistration(ctx context.Context, rawToken, email string) bool {
+	if rawToken == "" {
+		return false
 	}
+	var one int
+	err := h.db.QueryRow(ctx,
+		`SELECT 1 FROM organization_invites
+		 WHERE token_hash = $1 AND accepted_at IS NULL AND expires_at > now() AND lower(email) = lower($2)`,
+		hashToken(rawToken), email,
+	).Scan(&one)
+	return err == nil
+}
 
+func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	var req registerRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		httputil.WriteError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if !h.registrationEnabled && !h.inviteAllowsRegistration(r.Context(), req.InviteToken, req.Email) {
+		httputil.WriteError(w, http.StatusForbidden, "registration is disabled")
 		return
 	}
 

@@ -62,6 +62,9 @@ components:
           maxLength: 72
         name:
           type: string
+        inviteToken:
+          type: string
+          description: Raw workspace invite token. Lets the invited email address register while `REGISTRATION_ENABLED=false`.
 
     LoginRequest:
       type: object
@@ -1733,7 +1736,7 @@ paths:
       tags: [Authentication]
       summary: Register a new user
       description: |-
-        Rate limited to 0.5 requests per second with a burst of 5. Returns 403 when registration is disabled via `REGISTRATION_ENABLED=false`.
+        Rate limited to 0.5 requests per second with a burst of 5. Returns 403 when registration is disabled via `REGISTRATION_ENABLED=false`, unless the request carries an `inviteToken` for a pending workspace invite addressed to the same email.
 
         When no email backend (Listmonk / SMTP / sendmail) is configured the account is created with `email_verified=true` and the response sets `requiresEmailConfirmation=false` so the client can route the user straight to login instead of the check-your-email page.
       operationId: register
