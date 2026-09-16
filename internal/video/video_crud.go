@@ -493,7 +493,7 @@ func (h *Handler) Trim(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	where, args := orgVideoFilter(r.Context(), videoID, nil, "")
+	where, args := orgRowFilter(r.Context(), videoID, nil, "")
 	var duration int
 	var fileKey string
 	var shareToken string
@@ -521,7 +521,7 @@ func (h *Handler) Trim(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	updateWhere, updateArgs := orgVideoFilter(r.Context(), videoID, nil, "AND status = 'ready'")
+	updateWhere, updateArgs := orgRowFilter(r.Context(), videoID, nil, "AND status = 'ready'")
 	tag, err := h.db.Exec(r.Context(),
 		`UPDATE videos SET status = 'processing', processing_started_at = now(), updated_at = now() WHERE `+updateWhere, updateArgs...,
 	)

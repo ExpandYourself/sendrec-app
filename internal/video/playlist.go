@@ -84,10 +84,16 @@ func (h *Handler) CreatePlaylist(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// A playlist made inside a workspace belongs to the workspace, so the limit
+	// and the position sequence count that scope rather than the member's own.
+	orgID := orgScope(r.Context())
+
 	var count int
 	if err := h.db.QueryRow(r.Context(),
-		`SELECT COUNT(*) FROM playlists WHERE user_id = $1`,
-		userID,
+		`SELECT COUNT(*) FROM playlists
+		 WHERE ($1::uuid IS NULL AND user_id = $2 AND organization_id IS NULL)
+		    OR ($1::uuid IS NOT NULL AND organization_id = $1)`,
+		orgID, userID,
 	).Scan(&count); err != nil {
 		httputil.WriteError(w, http.StatusInternalServerError, "failed to check playlist limit")
 		return
@@ -102,10 +108,13 @@ func (h *Handler) CreatePlaylist(w http.ResponseWriter, r *http.Request) {
 	var item playlistItem
 	var createdAt, updatedAt time.Time
 	err := h.db.QueryRow(r.Context(),
-		`INSERT INTO playlists (user_id, title, description, position)
-		 VALUES ($1, $2, $3, (SELECT COALESCE(MAX(position), -1) + 1 FROM playlists WHERE user_id = $1))
+		`INSERT INTO playlists (user_id, organization_id, title, description, position)
+		 VALUES ($1, $4, $2, $3,
+		         (SELECT COALESCE(MAX(position), -1) + 1 FROM playlists
+		          WHERE ($4::uuid IS NULL AND user_id = $1 AND organization_id IS NULL)
+		             OR ($4::uuid IS NOT NULL AND organization_id = $4)))
 		 RETURNING id, position, created_at, updated_at`,
-		userID, title, req.Description,
+		userID, title, req.Description, orgID,
 	).Scan(&item.ID, &item.Position, &createdAt, &updatedAt)
 	if err != nil {
 		httputil.WriteError(w, http.StatusInternalServerError, "failed to create playlist")
@@ -131,9 +140,10 @@ func (h *Handler) ListPlaylists(w http.ResponseWriter, r *http.Request) {
 		         WHERE pv2.playlist_id = p.id AND v.thumbnail_key IS NOT NULL AND v.thumbnail_key != ''
 		         ORDER BY pv2.position, v.created_at LIMIT 1) AS thumb_share_token
 		 FROM playlists p
-		 WHERE p.user_id = $1
+		 WHERE ($1::uuid IS NULL AND p.user_id = $2 AND p.organization_id IS NULL)
+		    OR ($1::uuid IS NOT NULL AND p.organization_id = $1)
 		 ORDER BY p.position, p.created_at`,
-		userID,
+		orgScope(r.Context()), userID,
 	)
 	if err != nil {
 		httputil.WriteError(w, http.StatusInternalServerError, "failed to list playlists")
@@ -169,17 +179,17 @@ func (h *Handler) ListPlaylists(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetPlaylist(w http.ResponseWriter, r *http.Request) {
-	userID := auth.UserIDFromContext(r.Context())
 	playlistID := chi.URLParam(r, "id")
 
 	var detail playlistDetail
 	var createdAt, updatedAt time.Time
 	var shareToken *string
+	getClause, getArgs := orgRowFilter(r.Context(), playlistID, nil, "")
 	err := h.db.QueryRow(r.Context(),
-		`SELECT p.id, p.title, p.description, p.is_shared, p.share_token, p.require_email, p.share_password IS NOT NULL, p.position, p.created_at, p.updated_at
-		 FROM playlists p
-		 WHERE p.id = $1 AND p.user_id = $2`,
-		playlistID, userID,
+		`SELECT id, title, description, is_shared, share_token, require_email, share_password IS NOT NULL, position, created_at, updated_at
+		 FROM playlists
+		 WHERE `+getClause,
+		getArgs...,
 	).Scan(&detail.ID, &detail.Title, &detail.Description, &detail.IsShared, &shareToken, &detail.RequireEmail, &detail.HasPassword, &detail.Position, &createdAt, &updatedAt)
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -249,7 +259,6 @@ type updatePlaylistRequest struct {
 }
 
 func (h *Handler) UpdatePlaylist(w http.ResponseWriter, r *http.Request) {
-	userID := auth.UserIDFromContext(r.Context())
 	playlistID := chi.URLParam(r, "id")
 
 	var req updatePlaylistRequest
@@ -341,9 +350,8 @@ func (h *Handler) UpdatePlaylist(w http.ResponseWriter, r *http.Request) {
 		paramIdx++
 	}
 
-	query := fmt.Sprintf("UPDATE playlists SET %s WHERE id = $%d AND user_id = $%d",
-		strings.Join(setClauses, ", "), paramIdx, paramIdx+1)
-	args = append(args, playlistID, userID)
+	clause, args := orgRowFilter(r.Context(), playlistID, args, "")
+	query := fmt.Sprintf("UPDATE playlists SET %s WHERE %s", strings.Join(setClauses, ", "), clause)
 
 	tag, err := h.db.Exec(r.Context(), query, args...)
 	if err != nil {
@@ -359,12 +367,12 @@ func (h *Handler) UpdatePlaylist(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) DeletePlaylist(w http.ResponseWriter, r *http.Request) {
-	userID := auth.UserIDFromContext(r.Context())
 	playlistID := chi.URLParam(r, "id")
 
+	deleteClause, deleteArgs := orgRowFilter(r.Context(), playlistID, nil, "")
 	tag, err := h.db.Exec(r.Context(),
-		`DELETE FROM playlists WHERE id = $1 AND user_id = $2`,
-		playlistID, userID,
+		`DELETE FROM playlists WHERE `+deleteClause,
+		deleteArgs...,
 	)
 	if err != nil {
 		httputil.WriteError(w, http.StatusInternalServerError, "failed to delete playlist")
@@ -392,7 +400,6 @@ type reorderPlaylistVideosRequest struct {
 }
 
 func (h *Handler) AddPlaylistVideos(w http.ResponseWriter, r *http.Request) {
-	userID := auth.UserIDFromContext(r.Context())
 	playlistID := chi.URLParam(r, "id")
 
 	var req addPlaylistVideosRequest
@@ -407,9 +414,10 @@ func (h *Handler) AddPlaylistVideos(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var exists bool
+	existsClause, existsArgs := orgRowFilter(r.Context(), playlistID, nil, "")
 	if err := h.db.QueryRow(r.Context(),
-		`SELECT EXISTS(SELECT 1 FROM playlists WHERE id = $1 AND user_id = $2)`,
-		playlistID, userID,
+		`SELECT EXISTS(SELECT 1 FROM playlists WHERE `+existsClause+`)`,
+		existsArgs...,
 	).Scan(&exists); err != nil {
 		httputil.WriteError(w, http.StatusInternalServerError, "failed to verify playlist ownership")
 		return
@@ -420,10 +428,13 @@ func (h *Handler) AddPlaylistVideos(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for _, videoID := range req.VideoIDs {
+		// A workspace playlist may hold any video the workspace owns, including
+		// ones another member recorded.
+		videoClause, videoArgs := orgRowFilter(r.Context(), videoID, nil, "AND status != 'deleted'")
 		var videoExists bool
 		if err := h.db.QueryRow(r.Context(),
-			`SELECT EXISTS(SELECT 1 FROM videos WHERE id = $1 AND user_id = $2 AND status != 'deleted')`,
-			videoID, userID,
+			`SELECT EXISTS(SELECT 1 FROM videos WHERE `+videoClause+`)`,
+			videoArgs...,
 		).Scan(&videoExists); err != nil {
 			httputil.WriteError(w, http.StatusInternalServerError, "failed to verify video ownership")
 			return
@@ -456,14 +467,14 @@ func (h *Handler) AddPlaylistVideos(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) RemovePlaylistVideo(w http.ResponseWriter, r *http.Request) {
-	userID := auth.UserIDFromContext(r.Context())
 	playlistID := chi.URLParam(r, "id")
 	videoID := chi.URLParam(r, "videoId")
 
+	removeClause, removeArgs := orgRowFilter(r.Context(), playlistID, []any{playlistID, videoID}, "")
 	tag, err := h.db.Exec(r.Context(),
 		`DELETE FROM playlist_videos WHERE playlist_id = $1 AND video_id = $2
-		 AND playlist_id IN (SELECT id FROM playlists WHERE id = $1 AND user_id = $3)`,
-		playlistID, videoID, userID,
+		 AND playlist_id IN (SELECT id FROM playlists WHERE `+removeClause+`)`,
+		removeArgs...,
 	)
 	if err != nil {
 		httputil.WriteError(w, http.StatusInternalServerError, "failed to remove video from playlist")
@@ -486,7 +497,6 @@ func (h *Handler) RemovePlaylistVideo(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) ReorderPlaylistVideos(w http.ResponseWriter, r *http.Request) {
-	userID := auth.UserIDFromContext(r.Context())
 	playlistID := chi.URLParam(r, "id")
 
 	var req reorderPlaylistVideosRequest
@@ -496,9 +506,10 @@ func (h *Handler) ReorderPlaylistVideos(w http.ResponseWriter, r *http.Request) 
 	}
 
 	var exists bool
+	existsClause, existsArgs := orgRowFilter(r.Context(), playlistID, nil, "")
 	if err := h.db.QueryRow(r.Context(),
-		`SELECT EXISTS(SELECT 1 FROM playlists WHERE id = $1 AND user_id = $2)`,
-		playlistID, userID,
+		`SELECT EXISTS(SELECT 1 FROM playlists WHERE `+existsClause+`)`,
+		existsArgs...,
 	).Scan(&exists); err != nil {
 		httputil.WriteError(w, http.StatusInternalServerError, "failed to verify playlist ownership")
 		return

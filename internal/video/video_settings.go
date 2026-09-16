@@ -49,7 +49,7 @@ func (h *Handler) SetDownloadEnabled(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	where, args := orgVideoFilter(r.Context(), videoID, []any{req.DownloadEnabled}, "AND status != 'deleted'")
+	where, args := orgRowFilter(r.Context(), videoID, []any{req.DownloadEnabled}, "AND status != 'deleted'")
 	tag, err := h.db.Exec(r.Context(),
 		`UPDATE videos SET download_enabled = $1 WHERE `+where, args...,
 	)
@@ -74,7 +74,7 @@ func (h *Handler) SetEmailGate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	where, args := orgVideoFilter(r.Context(), videoID, []any{req.Enabled}, "AND status != 'deleted'")
+	where, args := orgRowFilter(r.Context(), videoID, []any{req.Enabled}, "AND status != 'deleted'")
 	tag, err := h.db.Exec(r.Context(),
 		`UPDATE videos SET email_gate_enabled = $1 WHERE `+where, args...,
 	)
@@ -99,7 +99,7 @@ func (h *Handler) SetLinkExpiry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	where, args := orgVideoFilter(r.Context(), videoID, nil, "AND status != 'deleted'")
+	where, args := orgRowFilter(r.Context(), videoID, nil, "AND status != 'deleted'")
 	var query string
 	if req.NeverExpires {
 		query = `UPDATE videos SET share_expires_at = NULL, updated_at = now() WHERE ` + where
@@ -144,7 +144,7 @@ func (h *Handler) SetCTA(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	where, args := orgVideoFilter(r.Context(), videoID, []any{req.Text, req.URL}, "AND status != 'deleted'")
+	where, args := orgRowFilter(r.Context(), videoID, []any{req.Text, req.URL}, "AND status != 'deleted'")
 	tag, err := h.db.Exec(r.Context(),
 		`UPDATE videos SET cta_text = $1, cta_url = $2 WHERE `+where, args...,
 	)
@@ -175,7 +175,7 @@ func (h *Handler) SetPassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.Password == "" {
-		where, args := orgVideoFilter(r.Context(), videoID, nil, "AND status != 'deleted'")
+		where, args := orgRowFilter(r.Context(), videoID, nil, "AND status != 'deleted'")
 		tag, err := h.db.Exec(r.Context(),
 			`UPDATE videos SET share_password = NULL, updated_at = now() WHERE `+where, args...,
 		)
@@ -197,7 +197,7 @@ func (h *Handler) SetPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	where, args := orgVideoFilter(r.Context(), videoID, []any{hash}, "AND status != 'deleted'")
+	where, args := orgRowFilter(r.Context(), videoID, []any{hash}, "AND status != 'deleted'")
 	tag, err := h.db.Exec(r.Context(),
 		`UPDATE videos SET share_password = $1, updated_at = now() WHERE `+where, args...,
 	)
@@ -224,7 +224,7 @@ func (h *Handler) Retranscribe(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	where, args := orgVideoFilter(r.Context(), videoID, nil, "AND status = 'ready'")
+	where, args := orgRowFilter(r.Context(), videoID, nil, "AND status = 'ready'")
 	var exists bool
 	err := h.db.QueryRow(r.Context(),
 		`SELECT true FROM videos WHERE `+where, args...,
@@ -239,7 +239,7 @@ func (h *Handler) Retranscribe(w http.ResponseWriter, r *http.Request) {
 			httputil.WriteError(w, http.StatusBadRequest, "invalid transcription language")
 			return
 		}
-		langWhere, langArgs := orgVideoFilter(r.Context(), videoID, []any{req.Language}, "")
+		langWhere, langArgs := orgRowFilter(r.Context(), videoID, []any{req.Language}, "")
 		if _, err := h.db.Exec(r.Context(),
 			`UPDATE videos SET transcription_language = $1, updated_at = now() WHERE `+langWhere, langArgs...,
 		); err != nil {
@@ -259,7 +259,7 @@ func (h *Handler) Retranscribe(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Extend(w http.ResponseWriter, r *http.Request) {
 	videoID := chi.URLParam(r, "id")
 
-	where, args := orgVideoFilter(r.Context(), videoID, nil, "AND status != 'deleted'")
+	where, args := orgRowFilter(r.Context(), videoID, nil, "AND status != 'deleted'")
 	var shareExpiresAt *time.Time
 	err := h.db.QueryRow(r.Context(),
 		`SELECT share_expires_at FROM videos WHERE `+where, args...,
@@ -274,7 +274,7 @@ func (h *Handler) Extend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, updateArgs := orgVideoFilter(r.Context(), videoID, nil, "AND status != 'deleted'")
+	_, updateArgs := orgRowFilter(r.Context(), videoID, nil, "AND status != 'deleted'")
 	tag, err := h.db.Exec(r.Context(),
 		`UPDATE videos SET share_expires_at = share_expires_at + INTERVAL '7 days', updated_at = now()
 		 WHERE `+where, updateArgs...,
@@ -299,7 +299,7 @@ func (h *Handler) Summarize(w http.ResponseWriter, r *http.Request) {
 
 	videoID := chi.URLParam(r, "id")
 
-	where, args := orgVideoFilter(r.Context(), videoID, nil, "AND status != 'deleted' AND transcript_status = 'ready'")
+	where, args := orgRowFilter(r.Context(), videoID, nil, "AND status != 'deleted' AND transcript_status = 'ready'")
 	tag, err := h.db.Exec(r.Context(),
 		`UPDATE videos SET summary_status = 'pending', summary = NULL, chapters = NULL, updated_at = now()
 		 WHERE `+where, args...,
@@ -324,7 +324,7 @@ func (h *Handler) GenerateDocument(w http.ResponseWriter, r *http.Request) {
 
 	videoID := chi.URLParam(r, "id")
 
-	where, args := orgVideoFilter(r.Context(), videoID, nil, "AND status != 'deleted' AND transcript_status = 'ready'")
+	where, args := orgRowFilter(r.Context(), videoID, nil, "AND status != 'deleted' AND transcript_status = 'ready'")
 	tag, err := h.db.Exec(r.Context(),
 		`UPDATE videos SET document_status = 'pending', document = NULL, updated_at = now()
 		 WHERE `+where, args...,
@@ -343,7 +343,7 @@ func (h *Handler) GenerateDocument(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) TogglePin(w http.ResponseWriter, r *http.Request) {
 	videoID := chi.URLParam(r, "id")
-	where, args := orgVideoFilter(r.Context(), videoID, nil, "AND status != 'deleted'")
+	where, args := orgRowFilter(r.Context(), videoID, nil, "AND status != 'deleted'")
 
 	var pinned bool
 	err := h.db.QueryRow(r.Context(),
@@ -359,7 +359,7 @@ func (h *Handler) TogglePin(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) DismissTitle(w http.ResponseWriter, r *http.Request) {
 	videoID := chi.URLParam(r, "id")
-	where, args := orgVideoFilter(r.Context(), videoID, nil, "AND status != 'deleted'")
+	where, args := orgRowFilter(r.Context(), videoID, nil, "AND status != 'deleted'")
 	tag, err := h.db.Exec(r.Context(),
 		`UPDATE videos SET suggested_title = NULL, updated_at = now() WHERE `+where, args...,
 	)
@@ -379,7 +379,7 @@ const MaxTranscriptUploadBytes = 5 << 20 // 5 MB
 func (h *Handler) UploadTranscript(w http.ResponseWriter, r *http.Request) {
 	videoID := chi.URLParam(r, "id")
 
-	where, args := orgVideoFilter(r.Context(), videoID, nil, "AND status = 'ready'")
+	where, args := orgRowFilter(r.Context(), videoID, nil, "AND status = 'ready'")
 	var userID, shareToken string
 	if err := h.db.QueryRow(r.Context(),
 		`SELECT user_id, share_token FROM videos WHERE `+where, args...,
@@ -430,7 +430,7 @@ func (h *Handler) UploadTranscript(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	updWhere, updArgs := orgVideoFilter(r.Context(), videoID,
+	updWhere, updArgs := orgRowFilter(r.Context(), videoID,
 		[]any{transcriptKey, string(segmentsJSON)}, "")
 	if _, err := h.db.Exec(r.Context(),
 		`UPDATE videos SET transcript_key = $1, transcript_json = $2, transcript_status = 'ready', transcript_started_at = NULL, updated_at = now() WHERE `+updWhere,

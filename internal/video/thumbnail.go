@@ -42,7 +42,7 @@ func (h *Handler) UploadThumbnail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	where, args := orgVideoFilter(r.Context(), videoID, nil, "AND status = 'ready'")
+	where, args := orgRowFilter(r.Context(), videoID, nil, "AND status = 'ready'")
 	var shareToken string
 	var videoOwnerID string
 	err := h.db.QueryRow(r.Context(),
@@ -75,7 +75,7 @@ func (h *Handler) UploadThumbnail(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) ResetThumbnail(w http.ResponseWriter, r *http.Request) {
 	videoID := chi.URLParam(r, "id")
 
-	where, args := orgVideoFilter(r.Context(), videoID, nil, "AND status = 'ready'")
+	where, args := orgRowFilter(r.Context(), videoID, nil, "AND status = 'ready'")
 	var shareToken, fileKey string
 	var thumbKey *string
 	var videoOwnerID string
