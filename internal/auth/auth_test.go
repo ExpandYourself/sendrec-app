@@ -116,15 +116,108 @@ func TestRegister_Disabled(t *testing.T) {
 	}
 }
 
+// inviteLookupSQL pins the predicates that keep an invite from authorizing more
+// than it should: unaccepted, unexpired, and addressed to the registering email.
+// Dropping any of them stops matching this expectation.
+const inviteLookupSQL = `(?s)SELECT email FROM organization_invites.*token_hash = \$1.*accepted_at IS NULL.*expires_at > now\(\).*lower\(email\) = lower\(\$2\)`
+
+// A single pending invite must never yield more than one account. users.email is
+// case-sensitive UNIQUE while the invite lookup is case-insensitive, so the
+// account is provisioned under the invited spelling; replays then collide on the
+// unique index instead of creating a second usable account.
+func TestRegister_Disabled_InviteProvisionsInvitedSpelling(t *testing.T) {
+	handler, mock := newTestHandler(t)
+	defer mock.Close()
+
+	handler.SetRegistrationEnabled(false)
+
+	mock.ExpectQuery(inviteLookupSQL).
+		WithArgs(hashToken("invite-token"), "ALICE@example.com").
+		WillReturnRows(pgxmock.NewRows([]string{"email"}).AddRow("alice@example.com"))
+	mock.ExpectQuery(`INSERT INTO users`).
+		WithArgs("alice@example.com", pgxmock.AnyArg(), "Alice", true).
+		WillReturnRows(pgxmock.NewRows([]string{"id"}).AddRow("user-uuid-1"))
+
+	body := `{"email":"ALICE@example.com","password":"strongpass123","name":"Alice","inviteToken":"invite-token"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/register", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+
+	handler.Register(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusCreated, rec.Code, rec.Body.String())
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet mock expectations: %v", err)
+	}
+}
+
+// SendInvite trims the invited address, so a registration typed with stray
+// whitespace still belongs to the same person and must be authorized.
+func TestRegister_Disabled_InviteToleratesSurroundingWhitespace(t *testing.T) {
+	handler, mock := newTestHandler(t)
+	defer mock.Close()
+
+	handler.SetRegistrationEnabled(false)
+
+	mock.ExpectQuery(inviteLookupSQL).
+		WithArgs(hashToken("invite-token"), "alice@example.com").
+		WillReturnRows(pgxmock.NewRows([]string{"email"}).AddRow("alice@example.com"))
+	mock.ExpectQuery(`INSERT INTO users`).
+		WithArgs("alice@example.com", pgxmock.AnyArg(), "Alice", true).
+		WillReturnRows(pgxmock.NewRows([]string{"id"}).AddRow("user-uuid-1"))
+
+	body := `{"email":"  alice@example.com  ","password":"strongpass123","name":"Alice","inviteToken":"invite-token"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/register", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+
+	handler.Register(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusCreated, rec.Code, rec.Body.String())
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet mock expectations: %v", err)
+	}
+}
+
+// A lookup failure must not be read as authorization.
+func TestRegister_Disabled_InviteLookupErrorRejected(t *testing.T) {
+	handler, mock := newTestHandler(t)
+	defer mock.Close()
+
+	handler.SetRegistrationEnabled(false)
+
+	mock.ExpectQuery(inviteLookupSQL).
+		WithArgs(hashToken("invite-token"), "alice@example.com").
+		WillReturnError(errors.New("connection reset"))
+
+	body := `{"email":"alice@example.com","password":"strongpass123","name":"Alice","inviteToken":"invite-token"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/register", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+
+	handler.Register(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusForbidden, rec.Code, rec.Body.String())
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet mock expectations: %v", err)
+	}
+}
+
 func TestRegister_Disabled_ValidInviteAllowsRegistration(t *testing.T) {
 	handler, mock := newTestHandler(t)
 	defer mock.Close()
 
 	handler.SetRegistrationEnabled(false)
 
-	mock.ExpectQuery(`SELECT 1 FROM organization_invites`).
+	mock.ExpectQuery(inviteLookupSQL).
 		WithArgs(hashToken("invite-token"), "alice@example.com").
-		WillReturnRows(pgxmock.NewRows([]string{"?column?"}).AddRow(1))
+		WillReturnRows(pgxmock.NewRows([]string{"email"}).AddRow("alice@example.com"))
 	mock.ExpectQuery(`INSERT INTO users`).
 		WithArgs("alice@example.com", pgxmock.AnyArg(), "Alice", true).
 		WillReturnRows(pgxmock.NewRows([]string{"id"}).AddRow("user-uuid-1"))
@@ -152,7 +245,7 @@ func TestRegister_Disabled_UnknownOrExpiredInviteRejected(t *testing.T) {
 
 	// Expired, revoked, already accepted or simply wrong tokens all come back
 	// as no rows, and must not bypass the closed-registration setting.
-	mock.ExpectQuery(`SELECT 1 FROM organization_invites`).
+	mock.ExpectQuery(inviteLookupSQL).
 		WithArgs(hashToken("stale-token"), "alice@example.com").
 		WillReturnError(pgx.ErrNoRows)
 
@@ -182,7 +275,7 @@ func TestRegister_Disabled_InviteForDifferentEmailRejected(t *testing.T) {
 
 	// The lookup is scoped to the invited address, so a valid token replayed
 	// with another email matches nothing.
-	mock.ExpectQuery(`SELECT 1 FROM organization_invites`).
+	mock.ExpectQuery(inviteLookupSQL).
 		WithArgs(hashToken("invite-token"), "mallory@example.com").
 		WillReturnError(pgx.ErrNoRows)
 

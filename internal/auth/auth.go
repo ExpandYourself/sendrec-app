@@ -123,21 +123,29 @@ func hashToken(raw string) string {
 	return hex.EncodeToString(h[:])
 }
 
-// inviteAllowsRegistration reports whether a pending workspace invite authorizes
-// the given email to create an account while public registration is off. The
-// lookup is scoped to the invited address, so a leaked token cannot onboard
-// anyone else, and expired, revoked or already accepted invites match nothing.
-func (h *Handler) inviteAllowsRegistration(ctx context.Context, rawToken, email string) bool {
+// invitedEmail returns the address a pending workspace invite authorizes to
+// create an account while public registration is off. The lookup is scoped to
+// the invited address, so a leaked token cannot onboard anyone else, and
+// expired, revoked or already accepted invites match nothing.
+//
+// It returns the stored spelling rather than the requested one: users.email is
+// case-sensitive UNIQUE, so provisioning under the invited spelling makes every
+// case variant of a replayed token collide on that index instead of creating a
+// second account.
+func (h *Handler) invitedEmail(ctx context.Context, rawToken, email string) (string, bool) {
 	if rawToken == "" {
-		return false
+		return "", false
 	}
-	var one int
+	var invited string
 	err := h.db.QueryRow(ctx,
-		`SELECT 1 FROM organization_invites
+		`SELECT email FROM organization_invites
 		 WHERE token_hash = $1 AND accepted_at IS NULL AND expires_at > now() AND lower(email) = lower($2)`,
 		hashToken(rawToken), email,
-	).Scan(&one)
-	return err == nil
+	).Scan(&invited)
+	if err != nil {
+		return "", false
+	}
+	return invited, true
 }
 
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
@@ -147,9 +155,17 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !h.registrationEnabled && !h.inviteAllowsRegistration(r.Context(), req.InviteToken, req.Email) {
-		httputil.WriteError(w, http.StatusForbidden, "registration is disabled")
-		return
+	// SendInvite trims the invited address, so trim here too or a stray space
+	// turns a genuine invite into "registration is disabled".
+	req.Email = strings.TrimSpace(req.Email)
+
+	if !h.registrationEnabled {
+		invited, ok := h.invitedEmail(r.Context(), req.InviteToken, req.Email)
+		if !ok {
+			httputil.WriteError(w, http.StatusForbidden, "registration is disabled")
+			return
+		}
+		req.Email = invited
 	}
 
 	if req.Email == "" || req.Password == "" || req.Name == "" {
