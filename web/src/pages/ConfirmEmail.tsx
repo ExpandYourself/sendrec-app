@@ -4,6 +4,11 @@ import { Link, useSearchParams } from "react-router-dom";
 export function ConfirmEmail() {
   const [searchParams] = useSearchParams();
   const token = searchParams.get("token");
+  // Registration under a workspace invite puts the accept page in the
+  // confirmation link, so signing in resumes the invite instead of ending on
+  // the dashboard.
+  const redirect = searchParams.get("redirect");
+  const loginPath = redirect ? `/login?redirect=${encodeURIComponent(redirect)}` : "/login";
 
   const [status, setStatus] = useState<"loading" | "success" | "error">(token ? "loading" : "error");
   const [errorMessage, setErrorMessage] = useState(token ? "" : "Missing confirmation token.");
@@ -54,7 +59,7 @@ export function ConfirmEmail() {
               Your account is now active. You can sign in.
             </p>
             <div className="auth-footer">
-              <Link to="/login">Sign in</Link>
+              <Link to={loginPath}>Sign in</Link>
             </div>
           </>
         )}

@@ -2,28 +2,34 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { apiFetch } from "../api/client";
 import { AuthForm } from "../components/AuthForm";
+import { inviteTokenFromRedirect } from "../utils/invite";
 
 export function Register() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [ready, setReady] = useState(false);
 
+  const redirect = searchParams.get("redirect");
+  // A workspace invite arrives as ?redirect=/invites/accept?token=... The token
+  // lets the invited address register even when public registration is off; the
+  // backend re-validates it against the invited email.
+  const inviteToken = inviteTokenFromRedirect(redirect);
+
   useEffect(() => {
     fetch("/api/health")
       .then((res) => res.json())
       .then((data: { registrationEnabled?: boolean }) => {
-        if (data.registrationEnabled === false) {
+        if (data.registrationEnabled === false && !inviteToken) {
           navigate("/login", { replace: true });
         } else {
           setReady(true);
         }
       })
       .catch(() => setReady(true));
-  }, [navigate]);
+  }, [navigate, inviteToken]);
 
   if (!ready) return null;
 
-  const redirect = searchParams.get("redirect");
   const loginPath = redirect ? `/login?redirect=${encodeURIComponent(redirect)}` : "/login";
 
   async function handleRegister(data: {
@@ -40,6 +46,7 @@ export function Register() {
         email: data.email,
         password: data.password,
         name: data.name,
+        ...(inviteToken ? { inviteToken } : {}),
       }),
     });
 

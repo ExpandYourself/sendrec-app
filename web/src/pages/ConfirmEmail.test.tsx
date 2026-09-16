@@ -4,8 +4,9 @@ import { MemoryRouter } from "react-router-dom";
 import { ConfirmEmail } from "./ConfirmEmail";
 import { expectNoA11yViolations } from "../test-utils/a11y";
 
-function renderConfirmEmail(token?: string) {
-  const path = token ? `/confirm-email?token=${token}` : "/confirm-email";
+function renderConfirmEmail(token?: string, redirect?: string) {
+  let path = token ? `/confirm-email?token=${token}` : "/confirm-email";
+  if (redirect) path += `&redirect=${encodeURIComponent(redirect)}`;
   return render(
     <MemoryRouter initialEntries={[path]}>
       <ConfirmEmail />
@@ -16,6 +17,22 @@ function renderConfirmEmail(token?: string) {
 describe("ConfirmEmail", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it("sends the user back to their invite after confirming", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({ message: "Email confirmed." }), { status: 200 })
+    );
+    renderConfirmEmail("valid-token", "/invites/accept?token=invite-token");
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "Email confirmed" })).toBeInTheDocument();
+    });
+
+    expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute(
+      "href",
+      `/login?redirect=${encodeURIComponent("/invites/accept?token=invite-token")}`
+    );
   });
 
   it("shows loading state then success on valid token", async () => {

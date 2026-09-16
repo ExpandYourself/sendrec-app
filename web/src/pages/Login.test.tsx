@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { Login } from "./Login";
@@ -134,6 +134,27 @@ describe("Login", () => {
     await vi.waitFor(() => {
       expect(screen.queryByRole("link", { name: "Sign up" })).not.toBeInTheDocument();
     });
+  });
+
+  it("shows sign up link when registration is disabled but an invite is being accepted", async () => {
+    // The link starts out visible, so the assertion only means something once
+    // the health response has been applied: resolve it by hand and flush.
+    let sendHealth: (res: Response) => void = () => {};
+    const health = new Promise<Response>((resolve) => {
+      sendHealth = resolve;
+    });
+    vi.spyOn(globalThis, "fetch")
+      .mockReturnValueOnce(health)
+      .mockResolvedValue(new Response("{}", { status: 200 }));
+
+    renderLogin(["/login?redirect=%2Finvites%2Faccept%3Ftoken%3Dinvite-token"]);
+
+    await act(async () => {
+      sendHealth(new Response(JSON.stringify({ registrationEnabled: false }), { status: 200 }));
+      await health;
+    });
+
+    expect(screen.getByRole("link", { name: "Sign up" })).toBeInTheDocument();
   });
 
   it("shows sign up link when registration is enabled", async () => {

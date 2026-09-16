@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/mail"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -63,6 +64,9 @@ type registerRequest struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
 	Name     string `json:"name"`
+	// InviteToken is the raw workspace invite token. It authorizes this one
+	// email to register while public registration is disabled.
+	InviteToken string `json:"inviteToken"`
 }
 
 type loginRequest struct {
@@ -120,16 +124,54 @@ func hashToken(raw string) string {
 	return hex.EncodeToString(h[:])
 }
 
-func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
-	if !h.registrationEnabled {
-		httputil.WriteError(w, http.StatusForbidden, "registration is disabled")
-		return
+// invitedEmail returns the address a pending workspace invite authorizes to
+// create an account while public registration is off. The lookup is scoped to
+// the invited address, so a leaked token cannot onboard anyone else, and
+// expired, revoked or already accepted invites match nothing.
+//
+// It returns the stored spelling rather than the requested one: users.email is
+// case-sensitive UNIQUE, so provisioning under the invited spelling makes every
+// case variant of a replayed token collide on that index instead of creating a
+// second account.
+func (h *Handler) invitedEmail(ctx context.Context, rawToken, email string) (string, bool) {
+	if rawToken == "" {
+		return "", false
 	}
+	var invited string
+	err := h.db.QueryRow(ctx,
+		`SELECT email FROM organization_invites
+		 WHERE token_hash = $1 AND accepted_at IS NULL AND expires_at > now() AND lower(email) = lower($2)`,
+		hashToken(rawToken), email,
+	).Scan(&invited)
+	if err != nil {
+		return "", false
+	}
+	return invited, true
+}
 
+// inviteAcceptPath is the web route that accepts a workspace invite.
+func inviteAcceptPath(rawToken string) string {
+	return "/invites/accept?token=" + url.QueryEscape(rawToken)
+}
+
+func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	var req registerRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		httputil.WriteError(w, http.StatusBadRequest, "invalid request body")
 		return
+	}
+
+	// SendInvite trims the invited address, so trim here too or a stray space
+	// turns a genuine invite into "registration is disabled".
+	req.Email = strings.TrimSpace(req.Email)
+
+	if !h.registrationEnabled {
+		invited, ok := h.invitedEmail(r.Context(), req.InviteToken, req.Email)
+		if !ok {
+			httputil.WriteError(w, http.StatusForbidden, "registration is disabled")
+			return
+		}
+		req.Email = invited
 	}
 
 	if req.Email == "" || req.Password == "" || req.Name == "" {
@@ -210,6 +252,12 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	confirmLink := h.baseURL + "/confirm-email?token=" + rawToken
+	if req.InviteToken != "" {
+		// Bring the invite along, or confirming the address drops the user on an
+		// empty dashboard and the workspace they were invited to is never joined.
+		// The path is fixed here; only the token comes from the request.
+		confirmLink += "&redirect=" + url.QueryEscape(inviteAcceptPath(req.InviteToken))
+	}
 	if err := h.emailSender.SendConfirmation(r.Context(), req.Email, req.Name, confirmLink); err != nil {
 		slog.Error("register: failed to send confirmation email", "error", err)
 	}
