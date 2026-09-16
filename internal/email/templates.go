@@ -3,6 +3,7 @@ package email
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -159,6 +160,33 @@ func builtinMail(kind string) mailTemplates {
 	}
 }
 
+func sampleData(kind string) any {
+	switch kind {
+	case MailKindPasswordReset:
+		return PasswordResetData{}
+	case MailKindCommentNotification:
+		return CommentNotificationData{}
+	case MailKindViewNotification:
+		return ViewNotificationData{}
+	case MailKindEmailConfirmation:
+		return EmailConfirmationData{}
+	case MailKindWelcome:
+		return WelcomeData{}
+	case MailKindOnboardingDay2:
+		return OnboardingDay2Data{}
+	case MailKindOnboardingDay7:
+		return OnboardingDay7Data{}
+	case MailKindWeeklyDigest:
+		return WeeklyDigestData{}
+	case MailKindOrgInvite:
+		return OrgInviteData{}
+	case MailKindRetentionWarning:
+		return RetentionWarningData{}
+	default:
+		return struct{}{}
+	}
+}
+
 func (c *Client) loadTemplates() {
 	c.templates = make(map[string]mailTemplates, len(mailKinds))
 	for _, kind := range mailKinds {
@@ -183,12 +211,13 @@ func (c *Client) loadTemplates() {
 
 	overrides := 0
 	for _, kind := range mailKinds {
+		data := sampleData(kind)
 		current := c.templates[kind]
-		if parsed, ok := loadCustomText(dir, kind+".subject.tmpl"); ok {
+		if parsed, ok := loadCustomText(dir, kind+".subject.tmpl", data); ok {
 			current.subject = parsed
 			overrides++
 		}
-		if parsed, ok := loadCustomHTML(dir, kind+".html.tmpl"); ok {
+		if parsed, ok := loadCustomHTML(dir, kind+".html.tmpl", data); ok {
 			current.html = parsed
 			overrides++
 		}
@@ -199,7 +228,7 @@ func (c *Client) loadTemplates() {
 	}
 }
 
-func loadCustomText(dir, filename string) (*texttemplate.Template, bool) {
+func loadCustomText(dir, filename string, data any) (*texttemplate.Template, bool) {
 	path := filepath.Join(dir, filename)
 	raw, ok := readTemplateFile(path)
 	if !ok {
@@ -210,10 +239,14 @@ func loadCustomText(dir, filename string) (*texttemplate.Template, bool) {
 		slog.Warn("invalid custom email template; using built-in", "file", path, "error", err)
 		return nil, false
 	}
+	if err := tmpl.Execute(io.Discard, data); err != nil {
+		slog.Warn("invalid custom email template; using built-in", "file", path, "error", err)
+		return nil, false
+	}
 	return tmpl, true
 }
 
-func loadCustomHTML(dir, filename string) (*htmltemplate.Template, bool) {
+func loadCustomHTML(dir, filename string, data any) (*htmltemplate.Template, bool) {
 	path := filepath.Join(dir, filename)
 	raw, ok := readTemplateFile(path)
 	if !ok {
@@ -221,6 +254,10 @@ func loadCustomHTML(dir, filename string) (*htmltemplate.Template, bool) {
 	}
 	tmpl, err := htmltemplate.New(filename).Parse(raw)
 	if err != nil {
+		slog.Warn("invalid custom email template; using built-in", "file", path, "error", err)
+		return nil, false
+	}
+	if err := tmpl.Execute(io.Discard, data); err != nil {
 		slog.Warn("invalid custom email template; using built-in", "file", path, "error", err)
 		return nil, false
 	}

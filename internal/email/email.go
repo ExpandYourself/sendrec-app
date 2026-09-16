@@ -305,10 +305,15 @@ func (c *Client) sendTx(ctx context.Context, body txRequest) error {
 	return nil
 }
 
-// fromHeader formats the RFC 5322 From header. An empty display name keeps
-// the current bare-address behaviour. The SMTP envelope (MAIL FROM) still
-// uses FromAddress alone.
+// fromHeader formats the RFC 5322 From header. With no display name the
+// header stays the bare address, matching the previous From: line. A set
+// name is formatted with mail.Address so commas are quoted and non-ASCII is
+// RFC 2047-encoded. The SMTP envelope (MAIL FROM) still uses FromAddress
+// alone.
 func (c *Client) fromHeader() string {
+	if c.config.FromName == "" {
+		return c.config.FromAddress
+	}
 	addr := mail.Address{Name: c.config.FromName, Address: c.config.FromAddress}
 	return addr.String()
 }

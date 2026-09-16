@@ -59,6 +59,48 @@ func TestNew_MalformedCustomTemplate_FallsBackWithoutBlockingStart(t *testing.T)
 	}
 }
 
+func TestNew_UnknownTemplateField_FallsBackWithoutBlockingStart(t *testing.T) {
+	dir := t.TempDir()
+	bad := filepath.Join(dir, MailKindPasswordReset+".html.tmpl")
+	if err := os.WriteFile(bad, []byte(`<p>Hi {{.Nmae}},</p>`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var logBuf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logBuf, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	client := New(Config{
+		SMTPHost:    "127.0.0.1",
+		SMTPPort:    1,
+		SMTPTLS:     "none",
+		FromAddress: "noreply@sendrec.eu",
+		TemplateDir: dir,
+	})
+	if !client.HasBackend() {
+		t.Fatal("expected SMTP backend to remain available after an unknown template field")
+	}
+
+	out := logBuf.String()
+	if !strings.Contains(out, "invalid custom email template") {
+		t.Errorf("expected startup warning about unknown field, got: %s", out)
+	}
+
+	_, body, err := client.render(MailKindPasswordReset, PasswordResetData{
+		Name: "Alice", ResetLink: "https://example.com/reset",
+	})
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	if !strings.Contains(body, "Reset password") {
+		t.Errorf("expected built-in body after unknown-field fallback, got %q", body)
+	}
+	if strings.Contains(body, "{{.Nmae}}") {
+		t.Errorf("unknown-field template leaked into the body: %q", body)
+	}
+}
+
 func TestNew_MissingTemplateDir_FallsBackWithoutBlockingStart(t *testing.T) {
 	var logBuf bytes.Buffer
 	prev := slog.Default()

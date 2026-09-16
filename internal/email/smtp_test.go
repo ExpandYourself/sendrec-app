@@ -211,6 +211,12 @@ func TestSendTx_SMTP_Success(t *testing.T) {
 	if !strings.Contains(got.data, "https://app.sendrec.eu/confirm?token=abc") {
 		t.Errorf("missing confirm link in body: %q", got.data)
 	}
+	if !strings.Contains(got.data, "From: noreply@sendrec.eu\r\n") {
+		t.Errorf("empty display name must keep a bare From address, got: %q", got.data)
+	}
+	if strings.Contains(got.data, "From: <noreply@sendrec.eu>") {
+		t.Errorf("empty display name must not wrap the address in angle brackets, got: %q", got.data)
+	}
 }
 
 func TestSendTx_SMTP_FromNameInHeaderNotEnvelope(t *testing.T) {
