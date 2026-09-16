@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ApiError, apiFetch, setAccessToken } from "../api/client";
 import { AuthForm } from "../components/AuthForm";
+import { inviteTokenFromRedirect } from "../utils/invite";
 import { providerLabel } from "../utils/sso";
 
 interface SsoEnforcement {
@@ -143,7 +144,7 @@ export function Login() {
           <Link to="/forgot-password" className="auth-footer-link-block">
             Forgot password?
           </Link>
-          {registrationEnabled && (
+          {(registrationEnabled || inviteTokenFromRedirect(redirect)) && (
             <>
               Don&apos;t have an account? <Link to={registerPath}>Sign up</Link>
             </>

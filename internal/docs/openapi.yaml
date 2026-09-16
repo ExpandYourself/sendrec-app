@@ -1738,6 +1738,8 @@ paths:
       description: |-
         Rate limited to 0.5 requests per second with a burst of 5. Returns 403 when registration is disabled via `REGISTRATION_ENABLED=false`, unless the request carries an `inviteToken` for a pending workspace invite addressed to the same email.
 
+        An `inviteToken` also rides along into the confirmation email: the link carries `redirect` back to the invite accept page, so an invited user who has to confirm their address resumes the invite after signing in.
+
         When no email backend (Listmonk / SMTP / sendmail) is configured the account is created with `email_verified=true` and the response sets `requiresEmailConfirmation=false` so the client can route the user straight to login instead of the check-your-email page.
       operationId: register
       requestBody:

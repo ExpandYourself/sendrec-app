@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { apiFetch } from "../api/client";
 import { AuthForm } from "../components/AuthForm";
+import { inviteTokenFromRedirect } from "../utils/invite";
 
 export function Register() {
   const navigate = useNavigate();
@@ -12,7 +13,7 @@ export function Register() {
   // A workspace invite arrives as ?redirect=/invites/accept?token=... The token
   // lets the invited address register even when public registration is off; the
   // backend re-validates it against the invited email.
-  const inviteToken = new URLSearchParams(redirect?.split("?")[1] ?? "").get("token");
+  const inviteToken = inviteTokenFromRedirect(redirect);
 
   useEffect(() => {
     fetch("/api/health")

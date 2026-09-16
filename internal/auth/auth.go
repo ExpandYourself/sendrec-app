@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/mail"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -148,6 +149,11 @@ func (h *Handler) invitedEmail(ctx context.Context, rawToken, email string) (str
 	return invited, true
 }
 
+// inviteAcceptPath is the web route that accepts a workspace invite.
+func inviteAcceptPath(rawToken string) string {
+	return "/invites/accept?token=" + url.QueryEscape(rawToken)
+}
+
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	var req registerRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -246,6 +252,12 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	confirmLink := h.baseURL + "/confirm-email?token=" + rawToken
+	if req.InviteToken != "" {
+		// Bring the invite along, or confirming the address drops the user on an
+		// empty dashboard and the workspace they were invited to is never joined.
+		// The path is fixed here; only the token comes from the request.
+		confirmLink += "&redirect=" + url.QueryEscape(inviteAcceptPath(req.InviteToken))
+	}
 	if err := h.emailSender.SendConfirmation(r.Context(), req.Email, req.Name, confirmLink); err != nil {
 		slog.Error("register: failed to send confirmation email", "error", err)
 	}

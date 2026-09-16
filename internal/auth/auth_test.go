@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -545,6 +546,45 @@ func TestRegister_SendsConfirmationEmail(t *testing.T) {
 	}
 	if !strings.Contains(emailSender.lastConfirmLink, "/confirm-email?token=") {
 		t.Errorf("expected confirm link to contain /confirm-email?token=, got %q", emailSender.lastConfirmLink)
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet expectations: %v", err)
+	}
+}
+
+// An invited user who has to confirm their address must come back to the
+// invite, so the confirmation link carries the accept redirect.
+func TestRegister_InviteSurvivesEmailConfirmation(t *testing.T) {
+	handler, mock := newTestHandler(t)
+	defer mock.Close()
+
+	emailSender := &mockEmailSender{}
+	handler.SetEmailSender(emailSender, "https://app.sendrec.eu")
+
+	mock.ExpectQuery(`INSERT INTO users`).
+		WithArgs("alice@example.com", pgxmock.AnyArg(), "Alice", false).
+		WillReturnRows(pgxmock.NewRows([]string{"id"}).AddRow("user-uuid-1"))
+	mock.ExpectExec(`UPDATE email_confirmations SET used_at`).
+		WithArgs("user-uuid-1").
+		WillReturnResult(pgxmock.NewResult("UPDATE", 0))
+	mock.ExpectExec(`INSERT INTO email_confirmations`).
+		WithArgs(pgxmock.AnyArg(), "user-uuid-1", pgxmock.AnyArg()).
+		WillReturnResult(pgxmock.NewResult("INSERT", 1))
+
+	body := `{"email":"alice@example.com","password":"strongpass123","name":"Alice","inviteToken":"invite/token value"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/register", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+
+	handler.Register(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusCreated, rec.Code, rec.Body.String())
+	}
+
+	wantRedirect := "&redirect=" + url.QueryEscape("/invites/accept?token=invite%2Ftoken+value")
+	if !strings.Contains(emailSender.lastConfirmLink, wantRedirect) {
+		t.Errorf("expected confirm link to carry %q, got %q", wantRedirect, emailSender.lastConfirmLink)
 	}
 
 	if err := mock.ExpectationsWereMet(); err != nil {
