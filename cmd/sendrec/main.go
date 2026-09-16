@@ -117,6 +117,8 @@ func main() {
 		Allowlist:                  email.ParseAllowlist(os.Getenv("EMAIL_ALLOWLIST")),
 		DeveloperEmail:             os.Getenv("DEVELOPER_EMAIL"),
 		FromAddress:                getEnv("EMAIL_FROM_ADDRESS", "noreply@sendrec.eu"),
+		FromName:                   os.Getenv("EMAIL_FROM_NAME"),
+		TemplateDir:                os.Getenv("EMAIL_TEMPLATE_DIR"),
 
 		SMTPHost:        os.Getenv("SMTP_HOST"),
 		SMTPPort:        int(getEnvInt64("SMTP_PORT", 587)),

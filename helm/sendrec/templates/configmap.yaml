@@ -57,6 +57,8 @@ data:
   EMAIL_ALLOWLIST: {{ .Values.sendrec.env.emailAllowlist | quote }}
   DEVELOPER_EMAIL: {{ .Values.sendrec.env.developerEmail | quote }}
   EMAIL_FROM_ADDRESS: {{ .Values.sendrec.env.emailFromAddress | quote }}
+  EMAIL_FROM_NAME: {{ .Values.sendrec.env.emailFromName | quote }}
+  EMAIL_TEMPLATE_DIR: {{ .Values.sendrec.env.emailTemplateDir | quote }}
   SMTP_HOST: {{ .Values.sendrec.env.smtpHost | quote }}
   SMTP_PORT: {{ .Values.sendrec.env.smtpPort | quote }}
   SMTP_TLS: {{ .Values.sendrec.env.smtpTls | quote }}

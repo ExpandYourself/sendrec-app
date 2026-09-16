@@ -6,10 +6,10 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"html"
 	"log/slog"
 	"net"
 	"net/http"
+	"net/mail"
 	"net/smtp"
 	"net/url"
 	"os/exec"
@@ -34,6 +34,8 @@ type Config struct {
 	Allowlist                  []string
 	DeveloperEmail             string
 	FromAddress                string
+	FromName                   string
+	TemplateDir                string
 
 	// SMTP backend (used when Listmonk BaseURL not set).
 	SMTPHost     string
@@ -56,6 +58,7 @@ type Client struct {
 	config            Config
 	http              *http.Client
 	sendmailAvailable bool
+	templates         map[string]mailTemplates
 }
 
 const defaultFromAddress = "noreply@sendrec.eu"
@@ -68,6 +71,8 @@ func New(cfg Config) *Client {
 	if cfg.FromAddress == "" {
 		cfg.FromAddress = defaultFromAddress
 	}
+	cfg.FromName = strings.TrimSpace(cfg.FromName)
+	cfg.TemplateDir = strings.TrimSpace(cfg.TemplateDir)
 	c := &Client{
 		config: cfg,
 		http:   &http.Client{Timeout: 10 * time.Second},
@@ -79,6 +84,7 @@ func New(cfg Config) *Client {
 			slog.Warn("EMAIL_USE_SENDMAIL=true but sendmail binary not found on PATH; treating as no backend", "error", err)
 		}
 	}
+	c.loadTemplates()
 	c.logBackend()
 	return c
 }
@@ -250,7 +256,7 @@ func (c *Client) sendTx(ctx context.Context, body txRequest) error {
 
 	// Validate at the boundary: covers SMTP, sendmail, and any future header
 	// surface (e.g. a Listmonk template that interpolates Data into Subject).
-	if err := validateMessageHeaders(c.config.FromAddress, body.SubscriberEmail, body.subject); err != nil {
+	if err := validateMessageHeaders(c.config.FromAddress, c.config.FromName, body.SubscriberEmail, body.subject); err != nil {
 		return err
 	}
 
@@ -299,13 +305,12 @@ func (c *Client) sendTx(ctx context.Context, body txRequest) error {
 	return nil
 }
 
-// esc escapes a value for interpolation into an HTML mail body. Names, video
-// titles, comment text and workspace names all come from users, and a mail
-// client renders whatever markup reaches it — so everything the senders splice
-// into their bodies goes through here, links included: escaping turns a URL's
-// "&" into "&amp;", which is what an href needs anyway.
-func esc(s string) string {
-	return html.EscapeString(s)
+// fromHeader formats the RFC 5322 From header. An empty display name keeps
+// the current bare-address behaviour. The SMTP envelope (MAIL FROM) still
+// uses FromAddress alone.
+func (c *Client) fromHeader() string {
+	addr := mail.Address{Name: c.config.FromName, Address: c.config.FromAddress}
+	return addr.String()
 }
 
 // rejectCRLF returns an error if v contains CR or LF, which would let an
@@ -320,9 +325,13 @@ func rejectCRLF(field, v string) error {
 
 // validateMessageHeaders rejects any field that would expose a CRLF-injection
 // vector. Body is allowed to contain newlines (it is the message payload after
-// the blank-line separator).
-func validateMessageHeaders(from, to, subject string) error {
+// the blank-line separator). fromName is checked separately because it is
+// another injection surface even though it is not the envelope sender.
+func validateMessageHeaders(from, fromName, to, subject string) error {
 	if err := rejectCRLF("From", from); err != nil {
+		return err
+	}
+	if err := rejectCRLF("From name", fromName); err != nil {
 		return err
 	}
 	if err := rejectCRLF("To", to); err != nil {
@@ -338,7 +347,8 @@ func (c *Client) sendViaSMTP(ctx context.Context, to, subject, htmlBody string) 
 	// SMTPTLS, SMTPPort and FromAddress are normalised at construction; trust them here.
 	host := c.config.SMTPHost
 	port := c.config.SMTPPort
-	from := c.config.FromAddress
+	envelopeFrom := c.config.FromAddress
+	headerFrom := c.fromHeader()
 	mode := c.config.SMTPTLS
 
 	addr := net.JoinHostPort(host, strconv.Itoa(port))
@@ -399,7 +409,7 @@ func (c *Client) sendViaSMTP(ctx context.Context, to, subject, htmlBody string) 
 		}
 	}
 
-	if err := client.Mail(from); err != nil {
+	if err := client.Mail(envelopeFrom); err != nil {
 		return fmt.Errorf("smtp mail from: %w", err)
 	}
 	if err := client.Rcpt(to); err != nil {
@@ -410,7 +420,7 @@ func (c *Client) sendViaSMTP(ctx context.Context, to, subject, htmlBody string) 
 		return fmt.Errorf("smtp data: %w", err)
 	}
 	msg := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n%s",
-		from, to, subject, htmlBody)
+		headerFrom, to, subject, htmlBody)
 	if _, err := wc.Write([]byte(msg)); err != nil {
 		return fmt.Errorf("smtp write: %w", err)
 	}
@@ -428,7 +438,7 @@ func (c *Client) sendViaSendmail(ctx context.Context, to, subject, htmlBody stri
 
 	// header CRLF rejection happens upstream in sendTx.
 	msg := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n%s",
-		c.config.FromAddress, to, subject, htmlBody)
+		c.fromHeader(), to, subject, htmlBody)
 
 	cmd := exec.CommandContext(ctx, "sendmail", "-t")
 	cmd.Stdin = strings.NewReader(msg)
@@ -447,6 +457,12 @@ func (c *Client) SendPasswordReset(ctx context.Context, toEmail, toName, resetLi
 		c.ensureSubscriber(ctx, toEmail, toName)
 	}
 
+	data := PasswordResetData{Name: toName, ResetLink: resetLink}
+	subject, body, err := c.render(MailKindPasswordReset, data)
+	if err != nil {
+		return err
+	}
+
 	tx := txRequest{
 		SubscriberEmail: toEmail,
 		Data: map[string]any{
@@ -454,11 +470,8 @@ func (c *Client) SendPasswordReset(ctx context.Context, toEmail, toName, resetLi
 			"name":      toName,
 		},
 		ContentType: "html",
-		subject:     "Reset your password",
-		Body: fmt.Sprintf(
-			`<p>Hi %s,</p><p>Click the link below to reset your password:</p><p><a href="%s">Reset password</a></p>`,
-			esc(toName), esc(resetLink),
-		),
+		subject:     subject,
+		Body:        body,
 	}
 
 	if c.config.TemplateID != 0 {
@@ -477,6 +490,18 @@ func (c *Client) SendCommentNotification(ctx context.Context, toEmail, toName, v
 		c.ensureSubscriber(ctx, toEmail, toName)
 	}
 
+	data := CommentNotificationData{
+		Name:          toName,
+		VideoTitle:    videoTitle,
+		CommentAuthor: commentAuthor,
+		CommentBody:   commentBody,
+		WatchURL:      watchURL,
+	}
+	subject, body, err := c.render(MailKindCommentNotification, data)
+	if err != nil {
+		return err
+	}
+
 	tx := txRequest{
 		SubscriberEmail: toEmail,
 		Data: map[string]any{
@@ -487,11 +512,8 @@ func (c *Client) SendCommentNotification(ctx context.Context, toEmail, toName, v
 			"watchURL":      watchURL,
 		},
 		ContentType: "html",
-		subject:     "New comment on your video",
-		Body: fmt.Sprintf(
-			`<p>Hi %s,</p><p><strong>%s</strong> commented on your video <strong>%s</strong>:</p><blockquote>%s</blockquote><p><a href="%s">View video</a></p>`,
-			esc(toName), esc(commentAuthor), esc(videoTitle), esc(commentBody), esc(watchURL),
-		),
+		subject:     subject,
+		Body:        body,
 	}
 
 	if c.config.CommentTemplateID != 0 {
@@ -510,6 +532,17 @@ func (c *Client) SendViewNotification(ctx context.Context, toEmail, toName, vide
 		c.ensureSubscriber(ctx, toEmail, toName)
 	}
 
+	data := ViewNotificationData{
+		Name:       toName,
+		VideoTitle: videoTitle,
+		WatchURL:   watchURL,
+		ViewCount:  viewCount,
+	}
+	subject, body, err := c.render(MailKindViewNotification, data)
+	if err != nil {
+		return err
+	}
+
 	tx := txRequest{
 		SubscriberEmail: toEmail,
 		Data: map[string]any{
@@ -520,11 +553,8 @@ func (c *Client) SendViewNotification(ctx context.Context, toEmail, toName, vide
 			"isDigest":   "false",
 		},
 		ContentType: "html",
-		subject:     "Your video was viewed",
-		Body: fmt.Sprintf(
-			`<p>Hi %s,</p><p>Your video <strong>%s</strong> has been viewed %d time(s).</p><p><a href="%s">View video</a></p>`,
-			esc(toName), esc(videoTitle), viewCount, esc(watchURL),
-		),
+		subject:     subject,
+		Body:        body,
 	}
 
 	if c.config.ViewTemplateID != 0 {
@@ -539,6 +569,12 @@ func (c *Client) SendConfirmation(ctx context.Context, toEmail, toName, confirmL
 		c.ensureSubscriber(ctx, toEmail, toName)
 	}
 
+	data := EmailConfirmationData{Name: toName, ConfirmLink: confirmLink}
+	subject, body, err := c.render(MailKindEmailConfirmation, data)
+	if err != nil {
+		return err
+	}
+
 	tx := txRequest{
 		SubscriberEmail: toEmail,
 		Data: map[string]any{
@@ -546,11 +582,8 @@ func (c *Client) SendConfirmation(ctx context.Context, toEmail, toName, confirmL
 			"name":        toName,
 		},
 		ContentType: "html",
-		subject:     "Confirm your email",
-		Body: fmt.Sprintf(
-			`<p>Hi %s,</p><p>Please confirm your email address by clicking the link below:</p><p><a href="%s">Confirm email</a></p>`,
-			esc(toName), esc(confirmLink),
-		),
+		subject:     subject,
+		Body:        body,
 	}
 
 	if c.config.ConfirmTemplateID != 0 {
@@ -565,20 +598,22 @@ func (c *Client) SendWelcome(ctx context.Context, toEmail, toName, dashboardURL 
 		c.ensureSubscriber(ctx, toEmail, toName)
 	}
 
+	data := WelcomeData{Name: toName, DashboardURL: dashboardURL, GitHubURL: sendrecGitHubURL}
+	subject, body, err := c.render(MailKindWelcome, data)
+	if err != nil {
+		return err
+	}
+
 	tx := txRequest{
 		SubscriberEmail: toEmail,
 		Data: map[string]any{
 			"name":         toName,
 			"dashboardURL": dashboardURL,
-			"githubURL":    "https://github.com/sendrec/sendrec",
+			"githubURL":    sendrecGitHubURL,
 		},
 		ContentType: "html",
-		subject:     "Welcome to SendRec",
-		Body: fmt.Sprintf(
-			`<p>Hi %s,</p><p>Welcome to SendRec! Your account is ready.</p><p><a href="%s">Go to dashboard</a></p>`+
-				`<p style="margin-top:16px;font-size:13px;color:#64748b;">SendRec is open source. If you find it useful, <a href="https://github.com/sendrec/sendrec">star us on GitHub</a>!</p>`,
-			esc(toName), esc(dashboardURL),
-		),
+		subject:     subject,
+		Body:        body,
 	}
 
 	if c.config.WelcomeTemplateID != 0 {
@@ -593,6 +628,12 @@ func (c *Client) SendOnboardingDay2(ctx context.Context, toEmail, toName, dashbo
 		c.ensureSubscriber(ctx, toEmail, toName)
 	}
 
+	data := OnboardingDay2Data{Name: toName, DashboardURL: dashboardURL}
+	subject, body, err := c.render(MailKindOnboardingDay2, data)
+	if err != nil {
+		return err
+	}
+
 	tx := txRequest{
 		SubscriberEmail: toEmail,
 		Data: map[string]any{
@@ -600,11 +641,8 @@ func (c *Client) SendOnboardingDay2(ctx context.Context, toEmail, toName, dashbo
 			"dashboardURL": dashboardURL,
 		},
 		ContentType: "html",
-		subject:     "Ready to share your first video?",
-		Body: fmt.Sprintf(
-			`<p>Hi %s,</p><p>Ready to share your first video? Record and share in seconds.</p><p><a href="%s">Get started</a></p>`,
-			esc(toName), esc(dashboardURL),
-		),
+		subject:     subject,
+		Body:        body,
 	}
 
 	if c.config.OnboardingDay2TemplateID != 0 {
@@ -619,6 +657,12 @@ func (c *Client) SendOnboardingDay7(ctx context.Context, toEmail, toName, dashbo
 		c.ensureSubscriber(ctx, toEmail, toName)
 	}
 
+	data := OnboardingDay7Data{Name: toName, DashboardURL: dashboardURL}
+	subject, body, err := c.render(MailKindOnboardingDay7, data)
+	if err != nil {
+		return err
+	}
+
 	tx := txRequest{
 		SubscriberEmail: toEmail,
 		Data: map[string]any{
@@ -626,11 +670,8 @@ func (c *Client) SendOnboardingDay7(ctx context.Context, toEmail, toName, dashbo
 			"dashboardURL": dashboardURL,
 		},
 		ContentType: "html",
-		subject:     "Unlock more with SendRec Pro",
-		Body: fmt.Sprintf(
-			`<p>Hi %s,</p><p>Unlock more with SendRec Pro — longer recordings, custom branding, and more.</p><p><a href="%s">Learn more</a></p>`,
-			esc(toName), esc(dashboardURL),
-		),
+		subject:     subject,
+		Body:        body,
 	}
 
 	if c.config.OnboardingDay7TemplateID != 0 {
@@ -656,6 +697,17 @@ func (c *Client) SendDigestNotification(ctx context.Context, toEmail, toName str
 		totalComments += v.CommentCount
 	}
 
+	data := WeeklyDigestData{
+		Name:          toName,
+		TotalViews:    totalViews,
+		TotalComments: totalComments,
+		Videos:        videos,
+	}
+	subject, body, err := c.render(MailKindWeeklyDigest, data)
+	if err != nil {
+		return err
+	}
+
 	tx := txRequest{
 		SubscriberEmail: toEmail,
 		Data: map[string]any{
@@ -666,11 +718,8 @@ func (c *Client) SendDigestNotification(ctx context.Context, toEmail, toName str
 			"videos":        videos,
 		},
 		ContentType: "html",
-		subject:     "Your weekly video digest",
-		Body: fmt.Sprintf(
-			`<p>Hi %s,</p><p>Your videos received %d view(s) and %d comment(s) this week.</p>`,
-			esc(toName), totalViews, totalComments,
-		),
+		subject:     subject,
+		Body:        body,
 	}
 
 	if c.config.ViewTemplateID != 0 {
@@ -685,6 +734,12 @@ func (c *Client) SendOrgInvite(ctx context.Context, toEmail, orgName, inviterNam
 		c.ensureSubscriber(ctx, toEmail, "")
 	}
 
+	data := OrgInviteData{OrgName: orgName, InviterName: inviterName, AcceptLink: acceptLink}
+	subject, body, err := c.render(MailKindOrgInvite, data)
+	if err != nil {
+		return err
+	}
+
 	tx := txRequest{
 		SubscriberEmail: toEmail,
 		Data: map[string]any{
@@ -693,11 +748,8 @@ func (c *Client) SendOrgInvite(ctx context.Context, toEmail, orgName, inviterNam
 			"acceptLink":  acceptLink,
 		},
 		ContentType: "html",
-		subject:     fmt.Sprintf("Join %s on SendRec", orgName),
-		Body: fmt.Sprintf(
-			`<p>Hi,</p><p><strong>%s</strong> has invited you to join <strong>%s</strong> on SendRec.</p><p><a href="%s">Accept invitation</a></p>`,
-			esc(inviterName), esc(orgName), esc(acceptLink),
-		),
+		subject:     subject,
+		Body:        body,
 	}
 
 	if c.config.OrgInviteTemplateID != 0 {
@@ -718,9 +770,10 @@ func (c *Client) SendRetentionWarning(ctx context.Context, toEmail string, video
 		c.ensureSubscriber(ctx, toEmail, "")
 	}
 
-	var titles []string
-	for _, v := range videos {
-		titles = append(titles, v.Title)
+	data := RetentionWarningData{Videos: videos, ExpiryDate: expiryDate}
+	subject, body, err := c.render(MailKindRetentionWarning, data)
+	if err != nil {
+		return err
 	}
 
 	tx := txRequest{
@@ -730,11 +783,8 @@ func (c *Client) SendRetentionWarning(ctx context.Context, toEmail string, video
 			"expiryDate": expiryDate,
 		},
 		ContentType: "html",
-		subject:     "Videos scheduled for deletion",
-		Body: fmt.Sprintf(
-			`<p>Hi,</p><p>The following videos will be deleted on <strong>%s</strong>: %s.</p><p>Upgrade your plan to keep them.</p>`,
-			esc(expiryDate), esc(strings.Join(titles, ", ")),
-		),
+		subject:     subject,
+		Body:        body,
 	}
 
 	if c.config.RetentionWarningTemplateID != 0 {
