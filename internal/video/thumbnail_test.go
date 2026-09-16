@@ -12,7 +12,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
-	"github.com/pashagolub/pgxmock/v4"
+	"github.com/pashagolub/pgxmock/v5"
 )
 
 func TestThumbnailFileKey(t *testing.T) {
