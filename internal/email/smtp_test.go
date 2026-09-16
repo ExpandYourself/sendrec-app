@@ -612,3 +612,96 @@ func waitForMessages(t *testing.T, s *fakeSMTPServer, n int) []capturedMessage {
 	}
 	return s.Captured()
 }
+
+// Names, titles and comment bodies come from users. They land in an HTML mail
+// body, so markup in them must arrive as text rather than as markup.
+func TestSendTx_SMTP_EscapesUserContentInBody(t *testing.T) {
+	cases := []struct {
+		name     string
+		send     func(*Client) error
+		injected string
+	}{
+		{
+			name: "comment author and body",
+			send: func(c *Client) error {
+				return c.SendCommentNotification(context.Background(), "alice@example.com", "Alice",
+					"<img src=x onerror=alert(1)>", "<b>Mallory</b>",
+					`<a href="https://evil.example.com">click</a>`, "https://app.sendrec.eu/v/1")
+			},
+			injected: `<a href="https://evil.example.com">`,
+		},
+		{
+			name: "recipient name",
+			send: func(c *Client) error {
+				return c.SendPasswordReset(context.Background(), "alice@example.com",
+					`<script>alert(1)</script>`, "https://app.sendrec.eu/reset?token=abc")
+			},
+			injected: "<script>",
+		},
+		{
+			name: "workspace and inviter names",
+			send: func(c *Client) error {
+				return c.SendOrgInvite(context.Background(), "alice@example.com",
+					`<b>Acme</b>`, `<a href="https://evil.example.com">Bob</a>`,
+					"https://app.sendrec.eu/invites/accept?token=abc")
+			},
+			injected: `<a href="https://evil.example.com">`,
+		},
+		{
+			name: "video title in view notification",
+			send: func(c *Client) error {
+				return c.SendViewNotification(context.Background(), "alice@example.com", "Alice",
+					`<iframe src="https://evil.example.com"></iframe>`, "https://app.sendrec.eu/v/1", 3)
+			},
+			injected: "<iframe",
+		},
+		{
+			name: "video titles in retention warning",
+			send: func(c *Client) error {
+				return c.SendRetentionWarning(context.Background(), "alice@example.com",
+					[]RetentionVideoSummary{{Title: `<script>alert(1)</script>`, WatchURL: "https://app.sendrec.eu/v/1"}},
+					"2026-10-01")
+			},
+			injected: "<script>",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			s := newFakeSMTPServer(t)
+			host, port := splitHostPort(t, s.Addr())
+			client := New(Config{
+				SMTPHost: host, SMTPPort: port, SMTPTLS: "none", FromAddress: "noreply@sendrec.eu",
+			})
+
+			if err := tc.send(client); err != nil {
+				t.Fatalf("send: %v", err)
+			}
+
+			msgs := waitForMessages(t, s, 1)
+			if strings.Contains(msgs[0].data, tc.injected) {
+				t.Errorf("user content reached the body as markup (%q):\n%s", tc.injected, msgs[0].data)
+			}
+		})
+	}
+}
+
+// Links SendRec builds itself carry query separators, which belong in an href
+// as entities so mail clients follow the whole URL.
+func TestSendTx_SMTP_EscapesAmpersandInLinks(t *testing.T) {
+	s := newFakeSMTPServer(t)
+	host, port := splitHostPort(t, s.Addr())
+	client := New(Config{
+		SMTPHost: host, SMTPPort: port, SMTPTLS: "none", FromAddress: "noreply@sendrec.eu",
+	})
+
+	link := "https://app.sendrec.eu/confirm-email?token=abc&redirect=%2Finvites%2Faccept"
+	if err := client.SendConfirmation(context.Background(), "alice@example.com", "Alice", link); err != nil {
+		t.Fatalf("SendConfirmation: %v", err)
+	}
+
+	msgs := waitForMessages(t, s, 1)
+	if !strings.Contains(msgs[0].data, "token=abc&amp;redirect=") {
+		t.Errorf("expected the link's ampersand escaped in href, got:\n%s", msgs[0].data)
+	}
+}
