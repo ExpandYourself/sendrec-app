@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { Settings } from "./Settings";
 import { expectNoA11yViolations } from "../test-utils/a11y";
+import { setCurrentOrgId } from "../api/orgContext";
 
 const mockApiFetch = vi.fn();
 
@@ -61,6 +62,37 @@ describe("Settings", () => {
       expect(screen.getByDisplayValue("alice@example.com")).toBeInTheDocument();
     });
     expect(screen.getByDisplayValue("Alice")).toBeInTheDocument();
+  });
+
+  it("reloads settings when the selected workspace changes", async () => {
+    const profileCalls = () =>
+      mockApiFetch.mock.calls.filter((c) => c[0] === "/api/user").length;
+
+    mockApiFetch.mockImplementation((path: string) => {
+      switch (path) {
+        case "/api/user":
+          return Promise.resolve({ name: "Alice", email: "alice@example.com" });
+        case "/api/settings/notifications":
+          return Promise.resolve({ notificationMode: "off" });
+        case "/api/videos/limits":
+          return Promise.resolve({ brandingEnabled: false });
+        case "/api/user/identities":
+          return Promise.resolve({ identities: [], hasPassword: false });
+        default:
+          return Promise.resolve([]);
+      }
+    });
+
+    renderSettings();
+    await waitFor(() => {
+      expect(profileCalls()).toBe(1);
+    });
+
+    setCurrentOrgId("org-1");
+
+    await waitFor(() => {
+      expect(profileCalls()).toBe(2);
+    });
   });
 
   it("renders Integrations card", async () => {

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { apiFetch } from "../../api/client";
+import { getCurrentOrgId, subscribeToOrgChanges } from "../../api/orgContext";
 import { LimitsResponse } from "../../types/limits";
 import {
   UserProfile,
@@ -52,6 +53,12 @@ interface LoadedState {
 export function Settings() {
   const [loaded, setLoaded] = useState<LoadedState | null>(null);
   const [version, setVersion] = useState("");
+  // Half of this page is workspace-scoped — branding above all — and the scope
+  // rides on a header rather than the URL, so switching workspace has to reload
+  // it or the previous scope's values stay on screen and get saved back.
+  const [orgId, setOrgId] = useState(getCurrentOrgId());
+
+  useEffect(() => subscribeToOrgChanges(() => setOrgId(getCurrentOrgId())), []);
 
   useEffect(() => {
     fetch("/api/health")
@@ -187,8 +194,9 @@ export function Settings() {
 
       setLoaded(state as LoadedState);
     }
+    setLoaded(null);
     fetchProfile();
-  }, []);
+  }, [orgId]);
 
   if (!loaded) {
     return (

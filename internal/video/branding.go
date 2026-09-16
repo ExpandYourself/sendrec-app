@@ -205,7 +205,7 @@ func (h *Handler) GetBrandingSettings(w http.ResponseWriter, r *http.Request) {
 		userID := auth.UserIDFromContext(r.Context())
 		err = h.db.QueryRow(r.Context(),
 			`SELECT company_name, logo_key, color_background, color_surface, color_text, color_accent, footer_text, custom_css
-			 FROM user_branding WHERE user_id = $1`,
+			 FROM user_branding WHERE user_id = $1 AND organization_id IS NULL`,
 			userID,
 		).Scan(&resp.CompanyName, &resp.LogoKey, &resp.ColorBackground, &resp.ColorSurface, &resp.ColorText, &resp.ColorAccent, &resp.FooterText, &resp.CustomCSS)
 	}
@@ -269,7 +269,7 @@ func (h *Handler) PutBrandingSettings(w http.ResponseWriter, r *http.Request) {
 		if _, err := h.db.Exec(r.Context(),
 			`INSERT INTO user_branding (user_id, company_name, logo_key, color_background, color_surface, color_text, color_accent, footer_text, custom_css)
 			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-			 ON CONFLICT (user_id) DO UPDATE SET
+			 ON CONFLICT (user_id) WHERE organization_id IS NULL DO UPDATE SET
 			   company_name = $2, logo_key = $3, color_background = $4, color_surface = $5,
 			   color_text = $6, color_accent = $7, footer_text = $8, custom_css = $9, updated_at = now()`,
 			userID, req.CompanyName, req.LogoKey, req.ColorBackground, req.ColorSurface, req.ColorText, req.ColorAccent, req.FooterText, req.CustomCSS,
@@ -283,27 +283,15 @@ func (h *Handler) PutBrandingSettings(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) upsertOrgBranding(ctx context.Context, orgID string, req setBrandingRequest) error {
-	tag, err := h.db.Exec(ctx,
-		`UPDATE user_branding SET
-		   company_name = $1, logo_key = $2, color_background = $3, color_surface = $4,
-		   color_text = $5, color_accent = $6, footer_text = $7, custom_css = $8, updated_at = now()
-		 WHERE organization_id = $9`,
-		req.CompanyName, req.LogoKey, req.ColorBackground, req.ColorSurface, req.ColorText, req.ColorAccent, req.FooterText, req.CustomCSS, orgID,
+	_, err := h.db.Exec(ctx,
+		`INSERT INTO user_branding (organization_id, company_name, logo_key, color_background, color_surface, color_text, color_accent, footer_text, custom_css)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		 ON CONFLICT (organization_id) WHERE organization_id IS NOT NULL DO UPDATE SET
+		   company_name = $2, logo_key = $3, color_background = $4, color_surface = $5,
+		   color_text = $6, color_accent = $7, footer_text = $8, custom_css = $9, updated_at = now()`,
+		orgID, req.CompanyName, req.LogoKey, req.ColorBackground, req.ColorSurface, req.ColorText, req.ColorAccent, req.FooterText, req.CustomCSS,
 	)
-	if err != nil {
-		return err
-	}
-	if tag.RowsAffected() == 0 {
-		_, err = h.db.Exec(ctx,
-			`INSERT INTO user_branding (organization_id, company_name, logo_key, color_background, color_surface, color_text, color_accent, footer_text, custom_css)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-			orgID, req.CompanyName, req.LogoKey, req.ColorBackground, req.ColorSurface, req.ColorText, req.ColorAccent, req.FooterText, req.CustomCSS,
-		)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+	return err
 }
 
 func (h *Handler) UploadBrandingLogo(w http.ResponseWriter, r *http.Request) {
@@ -371,7 +359,7 @@ func (h *Handler) UploadBrandingLogo(w http.ResponseWriter, r *http.Request) {
 	if _, err := h.db.Exec(r.Context(),
 		`INSERT INTO user_branding (user_id, logo_key)
 		 VALUES ($1, $2)
-		 ON CONFLICT (user_id) DO UPDATE SET logo_key = $2, updated_at = now()`,
+		 ON CONFLICT (user_id) WHERE organization_id IS NULL DO UPDATE SET logo_key = $2, updated_at = now()`,
 		userID, logoKey,
 	); err != nil {
 		httputil.WriteError(w, http.StatusInternalServerError, "failed to save logo key")
@@ -385,23 +373,13 @@ func (h *Handler) UploadBrandingLogo(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) upsertOrgLogoKey(ctx context.Context, orgID, logoKey string) error {
-	tag, err := h.db.Exec(ctx,
-		`UPDATE user_branding SET logo_key = $1, updated_at = now() WHERE organization_id = $2`,
-		logoKey, orgID,
+	_, err := h.db.Exec(ctx,
+		`INSERT INTO user_branding (organization_id, logo_key) VALUES ($1, $2)
+		 ON CONFLICT (organization_id) WHERE organization_id IS NOT NULL DO UPDATE SET
+		   logo_key = $2, updated_at = now()`,
+		orgID, logoKey,
 	)
-	if err != nil {
-		return err
-	}
-	if tag.RowsAffected() == 0 {
-		_, err = h.db.Exec(ctx,
-			`INSERT INTO user_branding (organization_id, logo_key) VALUES ($1, $2)`,
-			orgID, logoKey,
-		)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+	return err
 }
 
 func (h *Handler) DeleteBrandingLogo(w http.ResponseWriter, r *http.Request) {
@@ -419,7 +397,7 @@ func (h *Handler) DeleteBrandingLogo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	userID := auth.UserIDFromContext(r.Context())
-	h.deleteLogoByFilter(w, r, "user_id = $1", userID)
+	h.deleteLogoByFilter(w, r, "user_id = $1 AND organization_id IS NULL", userID)
 }
 
 func (h *Handler) deleteLogoByFilter(w http.ResponseWriter, r *http.Request, filter, filterValue string) {

@@ -88,6 +88,10 @@ jobs:
 
       - name: Run Go tests
         run: go clean -cache && go test ./... -race -coverprofile=coverage.out -covermode=atomic | tee test-output.txt
+        env:
+          # Tests that need real schema constraints connect here; they skip when
+          # this is unset, which is how they behave on a developer machine.
+          TEST_DATABASE_URL: postgres://sendrec:testpass@localhost:5432/sendrec?sslmode=disable
 
       - name: Coverage summary
         run: |
