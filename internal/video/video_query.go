@@ -551,16 +551,18 @@ func orgScope(ctx context.Context) *string {
 	return &orgID
 }
 
-// orgVideoFilter builds a WHERE clause and args for video access queries that
-// respect the caller's org role. Owner/admin can act on any org video (filter
-// by organization_id only), members can only act on their own video (filter by
-// user_id + organization_id), and personal context filters by user_id +
-// organization_id IS NULL.
+// orgRowFilter builds a WHERE clause and args for access queries against a table
+// of user- or workspace-owned rows — videos and playlists both use it. Owner and
+// admin can act on any row the workspace owns (filter by organization_id only),
+// members only on their own (user_id + organization_id), and personal context
+// filters by user_id + organization_id IS NULL.
+//
+// The clause names bare columns, so callers apply it to unaliased tables.
 //
 // baseArgs are the leading positional parameters (e.g. SET values in an UPDATE).
 // The returned clause uses $N placeholders starting after len(baseArgs).
 // An optional suffix (e.g. "AND status != 'deleted'") is appended when non-empty.
-func orgVideoFilter(ctx context.Context, videoID string, baseArgs []any, suffix string) (string, []any) {
+func orgRowFilter(ctx context.Context, videoID string, baseArgs []any, suffix string) (string, []any) {
 	userID := auth.UserIDFromContext(ctx)
 	orgID := auth.OrgIDFromContext(ctx)
 	sfx := ""
@@ -621,7 +623,7 @@ func sortDailyViews(daily []dailyViews) {
 func (h *Handler) Download(w http.ResponseWriter, r *http.Request) {
 	videoID := chi.URLParam(r, "id")
 
-	where, args := orgVideoFilter(r.Context(), videoID, nil, "AND status = 'ready'")
+	where, args := orgRowFilter(r.Context(), videoID, nil, "AND status = 'ready'")
 	var title string
 	var fileKey string
 	var contentType string
@@ -646,7 +648,7 @@ func (h *Handler) Download(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetTranscript(w http.ResponseWriter, r *http.Request) {
 	videoID := chi.URLParam(r, "id")
 
-	where, args := orgVideoFilter(r.Context(), videoID, nil, "AND status != 'deleted'")
+	where, args := orgRowFilter(r.Context(), videoID, nil, "AND status != 'deleted'")
 	var status string
 	var segmentsJSON *string
 	err := h.db.QueryRow(r.Context(),

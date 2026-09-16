@@ -24,14 +24,14 @@ func TestCreatePlaylist_Success(t *testing.T) {
 
 	now := time.Now().UTC().Truncate(time.Second)
 
-	mock.ExpectQuery(`SELECT COUNT\(\*\) FROM playlists WHERE user_id = \$1`).
-		WithArgs(testUserID).
+	mock.ExpectQuery(`SELECT COUNT\(\*\) FROM playlists`).
+		WithArgs((*string)(nil), testUserID).
 		WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(1))
 
 	expectPlanQuery(mock, "free")
 
 	mock.ExpectQuery(`INSERT INTO playlists`).
-		WithArgs(testUserID, "My Playlist", (*string)(nil)).
+		WithArgs(testUserID, "My Playlist", (*string)(nil), (*string)(nil)).
 		WillReturnRows(pgxmock.NewRows([]string{"id", "position", "created_at", "updated_at"}).
 			AddRow("playlist-1", 1, now, now))
 
@@ -142,8 +142,8 @@ func TestCreatePlaylist_FreeTierLimitReached(t *testing.T) {
 	storage := &mockStorage{}
 	handler := NewHandler(mock, storage, testBaseURL, 0, 0, 0, 3, testJWTSecret, false)
 
-	mock.ExpectQuery(`SELECT COUNT\(\*\) FROM playlists WHERE user_id = \$1`).
-		WithArgs(testUserID).
+	mock.ExpectQuery(`SELECT COUNT\(\*\) FROM playlists`).
+		WithArgs((*string)(nil), testUserID).
 		WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(3))
 
 	expectPlanQuery(mock, "free")
@@ -182,14 +182,14 @@ func TestCreatePlaylist_ProUnlimited(t *testing.T) {
 
 	now := time.Now().UTC().Truncate(time.Second)
 
-	mock.ExpectQuery(`SELECT COUNT\(\*\) FROM playlists WHERE user_id = \$1`).
-		WithArgs(testUserID).
+	mock.ExpectQuery(`SELECT COUNT\(\*\) FROM playlists`).
+		WithArgs((*string)(nil), testUserID).
 		WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(100))
 
 	expectPlanQuery(mock, "pro")
 
 	mock.ExpectQuery(`INSERT INTO playlists`).
-		WithArgs(testUserID, "Pro Playlist", (*string)(nil)).
+		WithArgs(testUserID, "Pro Playlist", (*string)(nil), (*string)(nil)).
 		WillReturnRows(pgxmock.NewRows([]string{"id", "position", "created_at", "updated_at"}).
 			AddRow("playlist-101", 100, now, now))
 
@@ -227,7 +227,7 @@ func TestListPlaylists_Success(t *testing.T) {
 
 	thumbToken := "thumb-video-token"
 	mock.ExpectQuery(`SELECT p\.id, p\.title, p\.description, p\.is_shared, p\.share_token, p\.position, p\.created_at, p\.updated_at`).
-		WithArgs(testUserID).
+		WithArgs((*string)(nil), testUserID).
 		WillReturnRows(pgxmock.NewRows([]string{"id", "title", "description", "is_shared", "share_token", "position", "created_at", "updated_at", "video_count", "thumb_share_token"}).
 			AddRow("playlist-1", "First Playlist", (*string)(nil), true, &shareToken, 0, earlier, earlier, int64(3), &thumbToken).
 			AddRow("playlist-2", "Second Playlist", (*string)(nil), false, (*string)(nil), 1, now, now, int64(0), (*string)(nil)))
@@ -295,7 +295,7 @@ func TestListPlaylists_Empty(t *testing.T) {
 	handler := NewHandler(mock, storage, testBaseURL, 0, 0, 0, 0, testJWTSecret, false)
 
 	mock.ExpectQuery(`SELECT p\.id, p\.title, p\.description, p\.is_shared, p\.share_token, p\.position, p\.created_at, p\.updated_at`).
-		WithArgs(testUserID).
+		WithArgs((*string)(nil), testUserID).
 		WillReturnRows(pgxmock.NewRows([]string{"id", "title", "description", "is_shared", "share_token", "position", "created_at", "updated_at", "video_count", "thumb_share_token"}))
 
 	r := chi.NewRouter()
@@ -339,7 +339,7 @@ func TestGetPlaylist_Success(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	shareToken := "playlisttoken"
 
-	mock.ExpectQuery(`SELECT p\.id, p\.title, p\.description, p\.is_shared, p\.share_token, p\.require_email, p\.share_password IS NOT NULL, p\.position, p\.created_at, p\.updated_at`).
+	mock.ExpectQuery(`SELECT id, title, description, is_shared, share_token, require_email, share_password IS NOT NULL, position, created_at, updated_at`).
 		WithArgs("playlist-1", testUserID).
 		WillReturnRows(pgxmock.NewRows([]string{"id", "title", "description", "is_shared", "share_token", "require_email", "has_password", "position", "created_at", "updated_at"}).
 			AddRow("playlist-1", "My Playlist", (*string)(nil), true, &shareToken, false, false, 0, now, now))
@@ -412,7 +412,7 @@ func TestGetPlaylist_NotFound(t *testing.T) {
 	storage := &mockStorage{}
 	handler := NewHandler(mock, storage, testBaseURL, 0, 0, 0, 0, testJWTSecret, false)
 
-	mock.ExpectQuery(`SELECT p\.id, p\.title, p\.description, p\.is_shared, p\.share_token, p\.require_email, p\.share_password IS NOT NULL, p\.position, p\.created_at, p\.updated_at`).
+	mock.ExpectQuery(`SELECT id, title, description, is_shared, share_token, require_email, share_password IS NOT NULL, position, created_at, updated_at`).
 		WithArgs("nonexistent", testUserID).
 		WillReturnRows(pgxmock.NewRows([]string{"id", "title", "description", "is_shared", "share_token", "require_email", "has_password", "position", "created_at", "updated_at"}))
 
@@ -449,7 +449,7 @@ func TestUpdatePlaylist_Rename(t *testing.T) {
 	playlistID := "playlist-1"
 	newTitle := "Renamed Playlist"
 
-	mock.ExpectExec(`UPDATE playlists SET title = \$1 WHERE id = \$2 AND user_id = \$3`).
+	mock.ExpectExec(`UPDATE playlists SET title = \$1 WHERE id = \$2 AND user_id = \$3 AND organization_id IS NULL`).
 		WithArgs(newTitle, playlistID, testUserID).
 		WillReturnResult(pgxmock.NewResult("UPDATE", 1))
 
@@ -482,7 +482,7 @@ func TestUpdatePlaylist_EnableSharing(t *testing.T) {
 
 	playlistID := "playlist-1"
 
-	mock.ExpectExec(`UPDATE playlists SET is_shared = \$1, share_token = \$2 WHERE id = \$3 AND user_id = \$4`).
+	mock.ExpectExec(`UPDATE playlists SET is_shared = \$1, share_token = \$2 WHERE id = \$3 AND user_id = \$4 AND organization_id IS NULL`).
 		WithArgs(true, pgxmock.AnyArg(), playlistID, testUserID).
 		WillReturnResult(pgxmock.NewResult("UPDATE", 1))
 
@@ -516,7 +516,7 @@ func TestUpdatePlaylist_NotFound(t *testing.T) {
 	playlistID := "nonexistent"
 	newTitle := "Updated Title"
 
-	mock.ExpectExec(`UPDATE playlists SET title = \$1 WHERE id = \$2 AND user_id = \$3`).
+	mock.ExpectExec(`UPDATE playlists SET title = \$1 WHERE id = \$2 AND user_id = \$3 AND organization_id IS NULL`).
 		WithArgs(newTitle, playlistID, testUserID).
 		WillReturnResult(pgxmock.NewResult("UPDATE", 0))
 
@@ -554,7 +554,7 @@ func TestDeletePlaylist_Success(t *testing.T) {
 
 	playlistID := "playlist-1"
 
-	mock.ExpectExec(`DELETE FROM playlists WHERE id = \$1 AND user_id = \$2`).
+	mock.ExpectExec(`DELETE FROM playlists WHERE id = \$1 AND user_id = \$2 AND organization_id IS NULL`).
 		WithArgs(playlistID, testUserID).
 		WillReturnResult(pgxmock.NewResult("DELETE", 1))
 
@@ -585,7 +585,7 @@ func TestDeletePlaylist_NotFound(t *testing.T) {
 
 	playlistID := "nonexistent"
 
-	mock.ExpectExec(`DELETE FROM playlists WHERE id = \$1 AND user_id = \$2`).
+	mock.ExpectExec(`DELETE FROM playlists WHERE id = \$1 AND user_id = \$2 AND organization_id IS NULL`).
 		WithArgs(playlistID, testUserID).
 		WillReturnResult(pgxmock.NewResult("DELETE", 0))
 
@@ -742,7 +742,7 @@ func TestRemovePlaylistVideo_Success(t *testing.T) {
 	videoID := "video-1"
 
 	mock.ExpectExec(`DELETE FROM playlist_videos`).
-		WithArgs(playlistID, videoID, testUserID).
+		WithArgs(playlistID, videoID, playlistID, testUserID).
 		WillReturnResult(pgxmock.NewResult("DELETE", 1))
 
 	mock.ExpectExec(`UPDATE playlists SET updated_at`).
@@ -778,7 +778,7 @@ func TestRemovePlaylistVideo_NotFound(t *testing.T) {
 	videoID := "nonexistent"
 
 	mock.ExpectExec(`DELETE FROM playlist_videos`).
-		WithArgs(playlistID, videoID, testUserID).
+		WithArgs(playlistID, videoID, playlistID, testUserID).
 		WillReturnResult(pgxmock.NewResult("DELETE", 0))
 
 	r := chi.NewRouter()

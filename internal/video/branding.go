@@ -436,7 +436,7 @@ func (h *Handler) GetVideoBranding(w http.ResponseWriter, r *http.Request) {
 	}
 	videoID := chi.URLParam(r, "id")
 
-	where, args := orgVideoFilter(r.Context(), videoID, nil, "AND status != 'deleted'")
+	where, args := orgRowFilter(r.Context(), videoID, nil, "AND status != 'deleted'")
 	var resp brandingSettingsResponse
 	err := h.db.QueryRow(r.Context(),
 		`SELECT branding_company_name, branding_logo_key, branding_color_background, branding_color_surface,
@@ -484,7 +484,7 @@ func (h *Handler) SetVideoBranding(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	where, args := orgVideoFilter(r.Context(), videoID,
+	where, args := orgRowFilter(r.Context(), videoID,
 		[]any{req.CompanyName, req.ColorBackground, req.ColorSurface, req.ColorText, req.ColorAccent, req.FooterText},
 		"AND status != 'deleted'",
 	)
