@@ -395,7 +395,7 @@ var playlistWatchTemplate = template.Must(template.New("playlist-watch").Funcs(t
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            color: var(--brand-text);
+            color: #fff;
             z-index: 10;
         }
         .next-overlay .next-label {
@@ -409,6 +409,7 @@ var playlistWatchTemplate = template.Must(template.New("playlist-watch").Funcs(t
         .next-overlay .next-title {
             font-size: 20px;
             font-weight: 600;
+            color: #fff;
             margin-bottom: 8px;
             text-align: center;
             padding: 0 2rem;

@@ -649,3 +649,62 @@ func TestPlaylistWatchPage_LightThemeActiveRowForeground(t *testing.T) {
 		t.Errorf("unmet expectations: %v", err)
 	}
 }
+
+func TestPlaylistWatchPage_LightThemeNextOverlayForeground(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer mock.Close()
+
+	handler := NewHandler(mock, &mockStorage{}, testBaseURL, 0, 0, 0, 0, testHMACSecret, false)
+	shareToken := "lightnext123"
+
+	lightCo := "Light Co"
+	lightSurface := "#ffffff"
+	lightText := "#000000"
+	lightAccent := "#1d4ed8"
+
+	mock.ExpectQuery(`SELECT p.id, p.title, p.description, p.share_password, p.require_email`).
+		WithArgs(shareToken).
+		WillReturnRows(pgxmock.NewRows(playlistWatchColumns).AddRow(
+			"playlist-1", "Light Playlist", (*string)(nil), (*string)(nil), false,
+			(*string)(nil),
+			&lightCo, (*string)(nil), (*string)(nil), &lightSurface,
+			&lightText, &lightAccent, (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+		))
+
+	mock.ExpectQuery(`SELECT v.id, v.title, v.duration, v.share_token, v.content_type, v.user_id`).
+		WithArgs("playlist-1").
+		WillReturnRows(pgxmock.NewRows(playlistVideosColumns).
+			AddRow("vid-1", "First Video", 120, "vtoken1abcde", "video/webm", "user-1", (*string)(nil)))
+
+	rec := servePlaylistWatchPage(handler, playlistWatchRequest(shareToken))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, "--brand-text: #000000") {
+		t.Error("expected light brand text color to reach the playlist page")
+	}
+	if !strings.Contains(body, "background: rgba(0, 0, 0, 0.85);") {
+		t.Error("next overlay must keep its fixed dark background")
+	}
+	overlayRule := ".next-overlay {\n            position: absolute;\n            top: 0; left: 0; right: 0; bottom: 0;\n            background: rgba(0, 0, 0, 0.85);\n            display: flex;\n            flex-direction: column;\n            align-items: center;\n            justify-content: center;\n            color: #fff;"
+	if !strings.Contains(body, overlayRule) {
+		t.Error("next overlay must use white text (brand text on the dark overlay is unreadable in a light theme)")
+	}
+	if !strings.Contains(body, ".next-overlay .next-title {\n            font-size: 20px;\n            font-weight: 600;\n            color: #fff;") {
+		t.Error("next overlay title must override the brand text color")
+	}
+	if strings.Contains(body, ".next-overlay {\n            position: absolute;\n            top: 0; left: 0; right: 0; bottom: 0;\n            background: rgba(0, 0, 0, 0.85);\n            display: flex;\n            flex-direction: column;\n            align-items: center;\n            justify-content: center;\n            color: var(--brand-text);") {
+		t.Error("next overlay must not inherit brand text (black on the dark overlay is unreadable)")
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet expectations: %v", err)
+	}
+}
