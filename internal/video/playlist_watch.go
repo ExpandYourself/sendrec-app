@@ -73,7 +73,7 @@ var playlistWatchTemplate = template.Must(template.New("playlist-watch").Funcs(t
         .gate-error.visible { display: block; }
         .gate-container input[type="password"] {
             width: 100%; padding: 0.75rem 1rem; border-radius: 8px;
-            border: 1px solid #334155; background: var(--brand-surface); color: #fff;
+            border: 1px solid #334155; background: var(--brand-surface); color: var(--brand-text);
             font-size: 1rem; margin-bottom: 1rem; outline: none;
         }
         .gate-container input[type="password"]:focus { border-color: var(--brand-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-accent) 10%, transparent); }
@@ -98,7 +98,7 @@ var playlistWatchTemplate = template.Must(template.New("playlist-watch").Funcs(t
         .gate-error.visible { display: block; }
         .gate-container input[type="email"] {
             width: 100%; padding: 0.75rem 1rem; border-radius: 8px;
-            border: 1px solid #334155; background: var(--brand-surface); color: #fff;
+            border: 1px solid #334155; background: var(--brand-surface); color: var(--brand-text);
             font-size: 1rem; margin-bottom: 1rem; outline: none;
         }
         .gate-container input[type="email"]:focus { border-color: var(--brand-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-accent) 10%, transparent); }
@@ -259,7 +259,7 @@ var playlistWatchTemplate = template.Must(template.New("playlist-watch").Funcs(t
             font-family: monospace;
         }
         .video-list-item.active .position {
-            color: var(--brand-accent);
+            color: #fff;
             font-weight: 600;
         }
         .now-playing-tag {
@@ -270,7 +270,7 @@ var playlistWatchTemplate = template.Must(template.New("playlist-watch").Funcs(t
             letter-spacing: 0.3px;
             display: none;
         }
-        .video-list-item.active .now-playing-tag { display: block; }
+        .video-list-item.active .now-playing-tag { display: block; color: #fff; }
         .video-thumb {
             width: 80px;
             height: 45px;
@@ -325,6 +325,7 @@ var playlistWatchTemplate = template.Must(template.New("playlist-watch").Funcs(t
         }
         .video-list-item.active .video-title {
             font-weight: 600;
+            color: #fff;
         }
         .video-info .video-duration {
             font-size: 11px;
