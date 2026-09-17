@@ -16,6 +16,11 @@ import (
 
 var playlistWatchColumns = []string{
 	"id", "title", "description", "share_password", "require_email",
+	"organization_id",
+	"ub_company_name", "ub_logo_key", "ub_color_background", "ub_color_surface",
+	"ub_color_text", "ub_color_accent", "ub_footer_text", "ub_custom_css",
+	"ob_company_name", "ob_logo_key", "ob_color_background", "ob_color_surface",
+	"ob_color_text", "ob_color_accent", "ob_footer_text", "ob_custom_css",
 }
 
 var playlistVideosColumns = []string{
@@ -50,7 +55,28 @@ func TestPlaylistWatchPage_Success(t *testing.T) {
 	mock.ExpectQuery(`SELECT p.id, p.title, p.description, p.share_password, p.require_email`).
 		WithArgs(shareToken).
 		WillReturnRows(pgxmock.NewRows(playlistWatchColumns).AddRow(
-			"playlist-1", "My Playlist", (*string)(nil), (*string)(nil), false,
+			"playlist-1",
+			"My Playlist",
+			(*string)(nil),
+			(*string)(nil),
+			false,
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
 		))
 
 	thumbKey := "recordings/user-1/vtoken2abcde.jpg"
@@ -158,7 +184,28 @@ func TestPlaylistWatchPage_PasswordProtected(t *testing.T) {
 	mock.ExpectQuery(`SELECT p.id, p.title, p.description, p.share_password, p.require_email`).
 		WithArgs(shareToken).
 		WillReturnRows(pgxmock.NewRows(playlistWatchColumns).AddRow(
-			"playlist-2", "Protected Playlist", (*string)(nil), &passwordHash, false,
+			"playlist-2",
+			"Protected Playlist",
+			(*string)(nil),
+			&passwordHash,
+			false,
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
 		))
 
 	rec := servePlaylistWatchPage(handler, playlistWatchRequest(shareToken))
@@ -295,6 +342,110 @@ func TestIdentifyPlaylistViewer_Success(t *testing.T) {
 		t.Error("expected email gate cookie to be set")
 	}
 
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet expectations: %v", err)
+	}
+}
+
+func TestPlaylistWatchPage_RendersWorkspaceBranding(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer mock.Close()
+
+	storage := &mockStorage{downloadURL: "https://storage.example.com/logo.png"}
+	handler := NewHandler(mock, storage, testBaseURL, 0, 0, 0, 0, testHMACSecret, false)
+	shareToken := "plbrand1234"
+
+	orgID := "42"
+	companyName := "ACME Inc"
+	logoKey := "branding/org42/logo.png"
+	orgAccent := "#ff0000"
+	footerText := "Powered by ACME"
+
+	mock.ExpectQuery(`SELECT p.id, p.title, p.description, p.share_password, p.require_email`).
+		WithArgs(shareToken).
+		WillReturnRows(pgxmock.NewRows(playlistWatchColumns).AddRow(
+			"playlist-1", "Branded Playlist", (*string)(nil), (*string)(nil), false,
+			&orgID,
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			&companyName, &logoKey,
+			(*string)(nil), (*string)(nil), (*string)(nil), &orgAccent, &footerText, (*string)(nil),
+		))
+
+	mock.ExpectQuery(`SELECT v.id, v.title, v.duration, v.share_token, v.content_type, v.user_id`).
+		WithArgs("playlist-1").
+		WillReturnRows(pgxmock.NewRows(playlistVideosColumns).
+			AddRow("vid-1", "First Video", 120, "vtoken1abcde", "video/webm", "user-1", (*string)(nil)))
+
+	rec := servePlaylistWatchPage(handler, playlistWatchRequest(shareToken))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, "<title>Branded Playlist — ACME Inc</title>") {
+		t.Error("expected workspace company name in page title")
+	}
+	if !strings.Contains(body, "--brand-accent: #ff0000") {
+		t.Error("expected workspace accent color")
+	}
+	if !strings.Contains(body, `src="https://storage.example.com/logo.png"`) {
+		t.Error("expected workspace logo URL in sidebar")
+	}
+	if !strings.Contains(body, "Powered by ACME") {
+		t.Error("expected custom footer text")
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet expectations: %v", err)
+	}
+}
+
+func TestPlaylistWatchPage_UsesPersonalBrandingWithoutWorkspace(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer mock.Close()
+
+	handler := NewHandler(mock, &mockStorage{}, testBaseURL, 0, 0, 0, 0, testHMACSecret, false)
+	shareToken := "plbrand1256"
+
+	personalAccent := "#00ccff"
+	personalCompany := "Solo Creator"
+
+	mock.ExpectQuery(`SELECT p.id, p.title, p.description, p.share_password, p.require_email`).
+		WithArgs(shareToken).
+		WillReturnRows(pgxmock.NewRows(playlistWatchColumns).AddRow(
+			"playlist-1", "My Playlist", (*string)(nil), (*string)(nil), false,
+			(*string)(nil),
+			&personalCompany, (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), &personalAccent, (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+		))
+
+	mock.ExpectQuery(`SELECT v.id, v.title, v.duration, v.share_token, v.content_type, v.user_id`).
+		WithArgs("playlist-1").
+		WillReturnRows(pgxmock.NewRows(playlistVideosColumns).
+			AddRow("vid-1", "First Video", 120, "vtoken1abcde", "video/webm", "user-1", (*string)(nil)))
+
+	rec := servePlaylistWatchPage(handler, playlistWatchRequest(shareToken))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, "--brand-accent: #00ccff") {
+		t.Error("expected personal accent color for workspace-less playlist")
+	}
+	if !strings.Contains(body, "Solo Creator") {
+		t.Error("expected personal company name")
+	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Errorf("unmet expectations: %v", err)
 	}

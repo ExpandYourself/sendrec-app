@@ -19,6 +19,13 @@ var embedPageColumns = []string{
 	"user_id", "email", "view_notification",
 	"cta_text", "cta_url", "transcript_key",
 	"email_gate_enabled", "chapters", "status",
+	"ub_company_name", "ub_logo_key", "ub_color_background", "ub_color_surface",
+	"ub_color_text", "ub_color_accent", "ub_footer_text", "ub_custom_css",
+	"ob_company_name", "ob_logo_key", "ob_color_background", "ob_color_surface",
+	"ob_color_text", "ob_color_accent", "ob_footer_text", "ob_custom_css",
+	"branding_company_name", "branding_logo_key", "branding_color_background",
+	"branding_color_surface", "branding_color_text", "branding_color_accent", "branding_footer_text",
+	"organization_id",
 }
 
 func embedPageRequest(shareToken string) *http.Request {
@@ -88,6 +95,16 @@ func TestEmbedPage_Expired_Returns410(t *testing.T) {
 			false,
 			(*string)(nil),
 			"ready",
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
 		))
 
 	rec := serveEmbedPage(handler, embedPageRequest(shareToken))
@@ -127,6 +144,16 @@ func TestEmbedPage_Success_RendersVideoPlayer(t *testing.T) {
 			false,
 			(*string)(nil),
 			"ready",
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
 		))
 
 	rec := serveEmbedPage(handler, embedPageRequest(shareToken))
@@ -183,6 +210,16 @@ func TestEmbedPage_WithThumbnail_RendersPoster(t *testing.T) {
 			false,
 			(*string)(nil),
 			"ready",
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
 		))
 
 	rec := serveEmbedPage(handler, embedPageRequest(shareToken))
@@ -224,6 +261,16 @@ func TestEmbedPage_PasswordProtected_NoCookie_ShowsPasswordForm(t *testing.T) {
 			false,
 			(*string)(nil),
 			"ready",
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
 		))
 
 	rec := serveEmbedPage(handler, embedPageRequest(shareToken))
@@ -267,6 +314,16 @@ func TestEmbedPage_RecordsView(t *testing.T) {
 			false,
 			(*string)(nil),
 			"ready",
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
 		))
 
 	mock.ExpectExec(`INSERT INTO video_views`).
@@ -310,6 +367,16 @@ func TestEmbedPage_CSPNonce(t *testing.T) {
 			false,
 			(*string)(nil),
 			"ready",
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
 		))
 
 	rec := serveEmbedPage(handler, embedPageRequest(shareToken))
@@ -350,6 +417,16 @@ func TestEmbedPage_NeverExpires(t *testing.T) {
 				false,
 				(*string)(nil),
 				"ready",
+				(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+				(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+				(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+				(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+				(*string)(nil), (*string)(nil), (*string)(nil),
+				(*string)(nil),
+				(*string)(nil),
+				(*string)(nil),
+				(*string)(nil),
+				(*string)(nil),
 			),
 		)
 
@@ -399,6 +476,16 @@ func TestEmbedPage_ResponsiveLayout(t *testing.T) {
 			false,
 			(*string)(nil),
 			"ready",
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
 		))
 
 	rec := serveEmbedPage(handler, embedPageRequest(shareToken))
@@ -445,6 +532,16 @@ func TestEmbedPage_RendersCtaOverlay(t *testing.T) {
 			false,
 			(*string)(nil),
 			"ready",
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
 		))
 
 	mock.ExpectExec(`INSERT INTO video_views`).
@@ -500,6 +597,16 @@ func TestEmbedPage_RendersSubtitleTrack(t *testing.T) {
 			false,
 			(*string)(nil),
 			"ready",
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
 		))
 
 	mock.ExpectExec(`INSERT INTO video_views`).
@@ -554,6 +661,16 @@ func TestEmbedPage_MilestoneTrackingScript(t *testing.T) {
 			false,
 			(*string)(nil),
 			"ready",
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
 		))
 
 	mock.ExpectExec(`INSERT INTO video_views`).
@@ -604,6 +721,16 @@ func TestEmbedPage_EmailGate_ShowsForm(t *testing.T) {
 			true,
 			(*string)(nil),
 			"ready",
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
 		))
 
 	rec := serveEmbedPage(handler, embedPageRequest(shareToken))
@@ -652,6 +779,16 @@ func TestEmbedPage_ChaptersBar(t *testing.T) {
 			false,
 			&chaptersJSON,
 			"ready",
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
 		))
 
 	mock.ExpectExec(`INSERT INTO video_views`).
@@ -709,6 +846,16 @@ func TestEmbedPage_NoChaptersBar_WhenEmpty(t *testing.T) {
 			false,
 			(*string)(nil),
 			"ready",
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
 		))
 
 	mock.ExpectExec(`INSERT INTO video_views`).
@@ -754,6 +901,16 @@ func TestEmbedPage_ProcessingStatus_ShowsProcessingOverlay(t *testing.T) {
 			false,
 			(*string)(nil),
 			"processing",
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
+			(*string)(nil),
 		))
 
 	mock.ExpectExec(`INSERT INTO video_views`).
@@ -775,6 +932,105 @@ func TestEmbedPage_ProcessingStatus_ShowsProcessingOverlay(t *testing.T) {
 
 	time.Sleep(50 * time.Millisecond)
 
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet expectations: %v", err)
+	}
+}
+
+func TestEmbedPage_RendersWorkspaceAccent(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer mock.Close()
+
+	storage := &mockStorage{downloadURL: "https://s3.example.com/video"}
+	handler := NewHandler(mock, storage, testBaseURL, 0, 0, 0, 0, testHMACSecret, false)
+	shareToken := "brandembed1"
+	createdAt := time.Date(2026, 2, 5, 14, 0, 0, 0, time.UTC)
+	expiresAt := time.Now().Add(7 * 24 * time.Hour)
+	orgAccent := "#ff0000"
+	orgID := "42"
+
+	mock.ExpectQuery(`SELECT v.id, v.title, v.file_key`).
+		WithArgs(shareToken).
+		WillReturnRows(pgxmock.NewRows(embedPageColumns).AddRow(
+			"vid-1", "Branded", "recordings/u1/abc.webm", "Bob Smith", createdAt, &expiresAt,
+			(*string)(nil), (*string)(nil), "video/webm",
+			"owner-user-id", "owner@example.com", (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil),
+			false,
+			(*string)(nil),
+			"ready",
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), &orgAccent, (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			&orgID,
+		))
+
+	rec := serveEmbedPage(handler, embedPageRequest(shareToken))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "--player-accent: #ff0000") {
+		t.Error("expected workspace accent color on embed player")
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet expectations: %v", err)
+	}
+}
+
+func TestEmbedPage_VideoAccentOverridesWorkspace(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer mock.Close()
+
+	storage := &mockStorage{downloadURL: "https://s3.example.com/video"}
+	handler := NewHandler(mock, storage, testBaseURL, 0, 0, 0, 0, testHMACSecret, false)
+	shareToken := "brandembed2"
+	createdAt := time.Date(2026, 2, 5, 14, 0, 0, 0, time.UTC)
+	expiresAt := time.Now().Add(7 * 24 * time.Hour)
+	orgAccent := "#ff0000"
+	videoAccent := "#00ff00"
+	orgID := "42"
+
+	mock.ExpectQuery(`SELECT v.id, v.title, v.file_key`).
+		WithArgs(shareToken).
+		WillReturnRows(pgxmock.NewRows(embedPageColumns).AddRow(
+			"vid-1", "Branded", "recordings/u1/abc.webm", "Bob Smith", createdAt, &expiresAt,
+			(*string)(nil), (*string)(nil), "video/webm",
+			"owner-user-id", "owner@example.com", (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil),
+			false,
+			(*string)(nil),
+			"ready",
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), &orgAccent, (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), &videoAccent, (*string)(nil),
+			&orgID,
+		))
+	rec := serveEmbedPage(handler, embedPageRequest(shareToken))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "--player-accent: #00ff00") {
+		t.Error("expected per-video accent to override workspace accent")
+	}
+	if strings.Contains(body, "--player-accent: #ff0000") {
+		t.Error("workspace accent should be overridden by per-video accent")
+	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Errorf("unmet expectations: %v", err)
 	}
