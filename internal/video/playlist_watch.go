@@ -66,7 +66,7 @@ var playlistWatchTemplate = template.Must(template.New("playlist-watch").Funcs(t
         {{if .NeedsPassword}}
         body { display: flex; align-items: center; justify-content: center; }
         .gate-container { text-align: center; padding: 2rem; max-width: 400px; width: 100%; }
-        .gate-icon { width: 56px; height: 56px; border-radius: 12px; background: rgba(0,182,122,0.1); display: flex; align-items: center; justify-content: center; margin: 0 auto 20px; font-size: 24px; }
+        .gate-icon { width: 56px; height: 56px; border-radius: 12px; background: color-mix(in srgb, var(--brand-accent) 10%, transparent); display: flex; align-items: center; justify-content: center; margin: 0 auto 20px; font-size: 24px; }
         .gate-container h1 { font-size: 24px; font-weight: 700; margin-bottom: 0.75rem; }
         .gate-container p { color: #94a3b8; margin-bottom: 1.5rem; }
         .gate-error { color: #ef4444; font-size: 0.875rem; margin-bottom: 1rem; display: none; }
@@ -76,7 +76,7 @@ var playlistWatchTemplate = template.Must(template.New("playlist-watch").Funcs(t
             border: 1px solid #334155; background: var(--brand-surface); color: #fff;
             font-size: 1rem; margin-bottom: 1rem; outline: none;
         }
-        .gate-container input[type="password"]:focus { border-color: var(--brand-accent); box-shadow: 0 0 0 3px rgba(0,182,122,0.1); }
+        .gate-container input[type="password"]:focus { border-color: var(--brand-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-accent) 10%, transparent); }
         .gate-container input[type="password"]::placeholder { color: #94a3b8; opacity: 0.5; }
         .gate-container button {
             width: 100%; background: var(--brand-accent); color: #fff; padding: 0.75rem 1.5rem;
@@ -91,7 +91,7 @@ var playlistWatchTemplate = template.Must(template.New("playlist-watch").Funcs(t
         {{else if .NeedsEmail}}
         body { display: flex; align-items: center; justify-content: center; }
         .gate-container { text-align: center; padding: 2rem; max-width: 400px; width: 100%; }
-        .gate-icon { width: 56px; height: 56px; border-radius: 12px; background: rgba(0,182,122,0.1); display: flex; align-items: center; justify-content: center; margin: 0 auto 20px; font-size: 24px; }
+        .gate-icon { width: 56px; height: 56px; border-radius: 12px; background: color-mix(in srgb, var(--brand-accent) 10%, transparent); display: flex; align-items: center; justify-content: center; margin: 0 auto 20px; font-size: 24px; }
         .gate-container h1 { font-size: 24px; font-weight: 700; margin-bottom: 0.75rem; }
         .gate-container p { color: #94a3b8; margin-bottom: 1.5rem; }
         .gate-error { color: #ef4444; font-size: 0.875rem; margin-bottom: 1rem; display: none; }
@@ -101,7 +101,7 @@ var playlistWatchTemplate = template.Must(template.New("playlist-watch").Funcs(t
             border: 1px solid #334155; background: var(--brand-surface); color: #fff;
             font-size: 1rem; margin-bottom: 1rem; outline: none;
         }
-        .gate-container input[type="email"]:focus { border-color: var(--brand-accent); box-shadow: 0 0 0 3px rgba(0,182,122,0.1); }
+        .gate-container input[type="email"]:focus { border-color: var(--brand-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-accent) 10%, transparent); }
         .gate-container input[type="email"]::placeholder { color: #94a3b8; opacity: 0.5; }
         .gate-container button {
             width: 100%; background: var(--brand-accent); color: #fff; padding: 0.75rem 1.5rem;
@@ -243,7 +243,7 @@ var playlistWatchTemplate = template.Must(template.New("playlist-watch").Funcs(t
             position: relative;
         }
         .video-list-item:hover {
-            background: var(--brand-surface);
+            background: color-mix(in srgb, var(--brand-text) 8%, var(--brand-surface));
         }
         .video-list-item.active {
             background: #1e3a5f;
@@ -832,6 +832,12 @@ func (h *Handler) PlaylistWatchPage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	branding := resolveBranding(r.Context(), h.storage, baseBranding, brandingSettingsResponse{})
+
+	// Keep the page's original panel shade unless custom branding overrides it.
+	if baseBranding.ColorSurface == nil || *baseBranding.ColorSurface == "" {
+		branding.ColorSurface = "#111d32"
+	}
+
 	brandingCfg, customCSS := branding, template.CSS(branding.CustomCSS)
 
 	if sharePassword != nil {

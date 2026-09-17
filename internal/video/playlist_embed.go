@@ -508,7 +508,7 @@ var playlistEmbedPasswordTemplate = template.Must(template.New("playlist-embed-p
             -webkit-font-smoothing: antialiased;
         }
         .container { text-align: center; padding: 2rem; max-width: 360px; width: 100%; }
-        .gate-icon { width: 48px; height: 48px; border-radius: 10px; background: rgba(0,182,122,0.1); display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; font-size: 20px; }
+        .gate-icon { width: 48px; height: 48px; border-radius: 10px; background: color-mix(in srgb, var(--player-accent) 10%, transparent); display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; font-size: 20px; }
         h1 { font-size: 1.25rem; margin-bottom: 0.5rem; font-weight: 700; }
         p { color: #94a3b8; margin-bottom: 1rem; font-size: 0.875rem; }
         .error { color: #ef4444; font-size: 0.8rem; margin-bottom: 0.75rem; display: none; }
@@ -517,7 +517,7 @@ var playlistEmbedPasswordTemplate = template.Must(template.New("playlist-embed-p
             border: 1px solid #334155; background: #1e293b; color: #fff;
             font-size: 0.875rem; margin-bottom: 0.75rem; outline: none;
         }
-        input[type="password"]:focus { border-color: var(--player-accent); box-shadow: 0 0 0 3px rgba(0,182,122,0.1); }
+        input[type="password"]:focus { border-color: var(--player-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--player-accent) 10%, transparent); }
         input[type="password"]::placeholder { color: #94a3b8; opacity: 0.5; }
         button {
             width: 100%; background: var(--player-accent); color: #fff; padding: 0.625rem 1rem;
@@ -582,7 +582,7 @@ var playlistEmbedEmailGateTemplate = template.Must(template.New("playlist-embed-
             -webkit-font-smoothing: antialiased;
         }
         .container { text-align: center; padding: 2rem; max-width: 360px; width: 100%; }
-        .gate-icon { width: 48px; height: 48px; border-radius: 10px; background: rgba(0,182,122,0.1); display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; font-size: 20px; }
+        .gate-icon { width: 48px; height: 48px; border-radius: 10px; background: color-mix(in srgb, var(--player-accent) 10%, transparent); display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; font-size: 20px; }
         h1 { font-size: 1.25rem; margin-bottom: 0.5rem; font-weight: 700; }
         p { color: #94a3b8; margin-bottom: 1rem; font-size: 0.875rem; }
         .error { color: #ef4444; font-size: 0.8rem; margin-bottom: 0.75rem; display: none; }
@@ -591,7 +591,7 @@ var playlistEmbedEmailGateTemplate = template.Must(template.New("playlist-embed-
             border: 1px solid #334155; background: #1e293b; color: #fff;
             font-size: 0.875rem; margin-bottom: 0.75rem; outline: none;
         }
-        input[type="email"]:focus { border-color: var(--player-accent); box-shadow: 0 0 0 3px rgba(0,182,122,0.1); }
+        input[type="email"]:focus { border-color: var(--player-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--player-accent) 10%, transparent); }
         input[type="email"]::placeholder { color: #94a3b8; opacity: 0.5; }
         button {
             width: 100%; background: var(--player-accent); color: #fff; padding: 0.625rem 1rem;
@@ -665,6 +665,10 @@ func (h *Handler) PlaylistEmbedPage(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+
+	// The embed page only consumes the accent color, so nil out the logo keys
+	// to avoid generating unused signed logo URLs.
+	ubLogoKey, obLogoKey = nil, nil
 
 	baseBranding := brandingSettingsResponse{
 		CompanyName: ubCompanyName, LogoKey: ubLogoKey,

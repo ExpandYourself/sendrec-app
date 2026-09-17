@@ -450,3 +450,93 @@ func TestPlaylistWatchPage_UsesPersonalBrandingWithoutWorkspace(t *testing.T) {
 		t.Errorf("unmet expectations: %v", err)
 	}
 }
+
+func TestPlaylistWatchPage_DefaultSurfaceWithoutBranding(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer mock.Close()
+
+	handler := NewHandler(mock, &mockStorage{}, testBaseURL, 0, 0, 0, 0, testHMACSecret, false)
+	shareToken := "plsurf1234"
+
+	mock.ExpectQuery(`SELECT p.id, p.title, p.description, p.share_password, p.require_email`).
+		WithArgs(shareToken).
+		WillReturnRows(pgxmock.NewRows(playlistWatchColumns).AddRow(
+			"playlist-1", "Unbranded Playlist", (*string)(nil), (*string)(nil), false,
+			(*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+		))
+
+	mock.ExpectQuery(`SELECT v.id, v.title, v.duration, v.share_token, v.content_type, v.user_id`).
+		WithArgs("playlist-1").
+		WillReturnRows(pgxmock.NewRows(playlistVideosColumns).
+			AddRow("vid-1", "First Video", 120, "vtoken1abcde", "video/webm", "user-1", (*string)(nil)))
+
+	rec := servePlaylistWatchPage(handler, playlistWatchRequest(shareToken))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, "--brand-surface: #111d32") {
+		t.Error("expected original navy panel shade as default brand surface")
+	}
+	if strings.Contains(body, "--brand-surface: #1e293b") {
+		t.Error("default brand surface must not change to the shared slate surface")
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet expectations: %v", err)
+	}
+}
+
+func TestPlaylistWatchPage_CustomSurfaceOverridesDefault(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer mock.Close()
+
+	handler := NewHandler(mock, &mockStorage{}, testBaseURL, 0, 0, 0, 0, testHMACSecret, false)
+	shareToken := "plsurf1256"
+
+	customSurface := "#222233"
+
+	mock.ExpectQuery(`SELECT p.id, p.title, p.description, p.share_password, p.require_email`).
+		WithArgs(shareToken).
+		WillReturnRows(pgxmock.NewRows(playlistWatchColumns).AddRow(
+			"playlist-1", "Custom Surface Playlist", (*string)(nil), (*string)(nil), false,
+			(*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), &customSurface,
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+		))
+
+	mock.ExpectQuery(`SELECT v.id, v.title, v.duration, v.share_token, v.content_type, v.user_id`).
+		WithArgs("playlist-1").
+		WillReturnRows(pgxmock.NewRows(playlistVideosColumns).
+			AddRow("vid-1", "First Video", 120, "vtoken1abcde", "video/webm", "user-1", (*string)(nil)))
+
+	rec := servePlaylistWatchPage(handler, playlistWatchRequest(shareToken))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, "--brand-surface: #222233") {
+		t.Error("expected custom branded surface color to override the navy default")
+	}
+	if strings.Contains(body, "--brand-surface: #111d32") {
+		t.Error("navy default must not appear when a custom surface is configured")
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet expectations: %v", err)
+	}
+}

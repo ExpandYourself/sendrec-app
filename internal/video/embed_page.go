@@ -94,7 +94,7 @@ var embedPageTemplate = template.Must(template.New("embed").Parse(`<!DOCTYPE htm
             color: #e2e8f0;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         }
-        .embed-processing-icon { margin-bottom: 16px; }
+        .embed-processing-icon { margin-bottom: 16px; color: var(--player-accent); }
         .embed-processing-spinner {
             animation: spin 1s linear infinite;
             transform-origin: center;
@@ -179,7 +179,7 @@ var embedPageTemplate = template.Must(template.New("embed").Parse(`<!DOCTYPE htm
 {{if eq .VideoStatus "processing"}}
             <div class="embed-processing">
                 <div class="embed-processing-icon">
-                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#00b67a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <circle cx="12" cy="12" r="10" opacity="0.2"/>
                         <path d="M12 2a10 10 0 0 1 10 10" class="embed-processing-spinner"/>
                     </svg>
@@ -609,6 +609,10 @@ func (h *Handler) EmbedPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	nonce := httputil.NonceFromContext(r.Context())
+
+	// The embed page only consumes the accent color, so nil out the logo keys
+	// to avoid generating unused signed logo URLs.
+	ubLogoKey, obLogoKey, vbLogoKey = nil, nil, nil
 
 	baseBranding := brandingSettingsResponse{
 		CompanyName: ubCompanyName, LogoKey: ubLogoKey,

@@ -73,6 +73,51 @@ func TestPlaylistEmbedPage_RendersWorkspaceAccent(t *testing.T) {
 	}
 }
 
+func TestPlaylistEmbedPage_PasswordGate_RendersWorkspaceAccent(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer mock.Close()
+
+	handler := NewHandler(mock, &mockStorage{}, testBaseURL, 0, 0, 0, 0, testHMACSecret, false)
+	shareToken := "plembgate1"
+
+	passwordHash, _ := hashSharePassword("secret123")
+	orgID := "42"
+	orgAccent := "#ff0000"
+
+	mock.ExpectQuery(`SELECT p.id, p.title, p.share_password, p.require_email`).
+		WithArgs(shareToken).
+		WillReturnRows(pgxmock.NewRows(playlistEmbedColumns).AddRow(
+			"playlist-1", "Gated Playlist", &passwordHash, false,
+			&orgID,
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), &orgAccent, (*string)(nil), (*string)(nil),
+		))
+
+	req := httptest.NewRequest(http.MethodGet, "/embed/playlist/"+shareToken, nil)
+	req = req.WithContext(httputil.ContextWithNonce(req.Context(), "test-nonce"))
+
+	rec := servePlaylistEmbedPage(handler, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "password") {
+		t.Error("expected password form on gate page")
+	}
+	if !strings.Contains(body, "--player-accent: #ff0000") {
+		t.Error("expected workspace accent color on playlist embed password gate")
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet expectations: %v", err)
+	}
+}
+
 func TestPlaylistEmbedPage_DefaultAccentWithoutBranding(t *testing.T) {
 	mock, err := pgxmock.NewPool()
 	if err != nil {

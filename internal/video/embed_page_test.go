@@ -291,6 +291,58 @@ func TestEmbedPage_PasswordProtected_NoCookie_ShowsPasswordForm(t *testing.T) {
 	}
 }
 
+func TestEmbedPage_PasswordGate_RendersWorkspaceAccent(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer mock.Close()
+
+	passwordHash, _ := hashSharePassword("secret123")
+	storage := &mockStorage{downloadURL: "https://s3.example.com/video.webm"}
+	handler := NewHandler(mock, storage, testBaseURL, 0, 0, 0, 0, testHMACSecret, false)
+	shareToken := "pwdbrand123"
+	createdAt := time.Date(2026, 2, 5, 14, 0, 0, 0, time.UTC)
+	expiresAt := time.Now().Add(7 * 24 * time.Hour)
+	orgID := "42"
+	orgAccent := "#ff0000"
+
+	mock.ExpectQuery(`SELECT v.id, v.title, v.file_key`).
+		WithArgs(shareToken).
+		WillReturnRows(pgxmock.NewRows(embedPageColumns).AddRow(
+			"vid-1", "Protected Video", "recordings/u1/abc.webm", "Alice", createdAt, &expiresAt,
+			(*string)(nil), &passwordHash, "video/webm",
+			"owner-user-id", "owner@example.com", (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil),
+			false,
+			(*string)(nil),
+			"ready",
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), &orgAccent, (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			&orgID,
+		))
+
+	rec := serveEmbedPage(handler, embedPageRequest(shareToken))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "password") {
+		t.Error("expected password form in response")
+	}
+	if !strings.Contains(body, "--player-accent: #ff0000") {
+		t.Error("expected workspace accent color on embed password gate")
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet expectations: %v", err)
+	}
+}
+
 func TestEmbedPage_RecordsView(t *testing.T) {
 	mock, err := pgxmock.NewPool()
 	if err != nil {
@@ -518,6 +570,8 @@ func TestEmbedPage_RendersCtaOverlay(t *testing.T) {
 
 	ctaText := "Get started"
 	ctaUrl := "https://example.com/start"
+	orgID := "42"
+	orgAccent := "#ff0000"
 	shareToken := "ctatoken1234"
 	createdAt := time.Date(2026, 2, 5, 14, 0, 0, 0, time.UTC)
 	expiresAt := time.Now().Add(7 * 24 * time.Hour)
@@ -535,13 +589,10 @@ func TestEmbedPage_RendersCtaOverlay(t *testing.T) {
 			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
 			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
 			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
-			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			(*string)(nil), &orgAccent, (*string)(nil), (*string)(nil),
 			(*string)(nil), (*string)(nil), (*string)(nil),
-			(*string)(nil),
-			(*string)(nil),
-			(*string)(nil),
-			(*string)(nil),
-			(*string)(nil),
+			(*string)(nil), (*string)(nil), (*string)(nil), (*string)(nil),
+			&orgID,
 		))
 
 	mock.ExpectExec(`INSERT INTO video_views`).
@@ -563,6 +614,9 @@ func TestEmbedPage_RendersCtaOverlay(t *testing.T) {
 	}
 	if !strings.Contains(body, "https://example.com/start") {
 		t.Error("expected CTA URL")
+	}
+	if !strings.Contains(body, "--player-accent: #ff0000") {
+		t.Error("expected workspace accent color on CTA button")
 	}
 
 	time.Sleep(100 * time.Millisecond)
